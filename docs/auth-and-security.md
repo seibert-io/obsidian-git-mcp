@@ -1,0 +1,74 @@
+# Authentication & Security
+
+## Authentication
+
+### Dual-Mode Auth (`src/auth.ts`)
+
+All requests to `/mcp` must include an `Authorization: Bearer <token>` header. The middleware supports two token types:
+
+1. **JWT access tokens** — issued via the OAuth 2.1 flow (`/oauth/token`). Verified using the `JWT_SECRET`.
+2. **Static bearer tokens** — configured via `MCP_API_TOKEN`. Compared using timing-safe equality.
+
+JWT verification is attempted first. If it fails, the static token comparison is tried.
+
+Unauthenticated endpoints: `/health`, `/.well-known/oauth-authorization-server`, `/oauth/*`.
+
+### OAuth 2.1 (`src/oauth/`)
+
+Full OAuth 2.1 implementation with PKCE (S256) and Dynamic Client Registration. See `docs/oauth.md` for details.
+
+### Static Token Format
+
+For production use, generate a strong random token (min 16 characters):
+```bash
+openssl rand -hex 32
+```
+
+## Path Security (`src/utils/pathValidation.ts`)
+
+### Path Traversal Prevention
+
+All file paths are validated by `resolveVaultPath()` (sync) and `resolveVaultPathSafe()` (async, with symlink detection):
+
+1. Rejects empty paths
+2. Resolves the path relative to `VAULT_PATH` using `path.resolve()`
+3. Verifies the resolved path starts with the vault directory
+4. Blocks any path component that is `.git` or starts with `.git` at root level
+5. (Async) Checks that the file is not a symlink pointing outside the vault
+
+### Protected Paths
+
+- `..` traversal — rejected (resolves outside vault)
+- Absolute paths outside vault — rejected
+- `.git/` and subdirectories — rejected (all path components checked)
+- `.gitmodules`, `.gitattributes`, etc. at vault root — rejected
+- Symlinks that escape the vault — rejected by `resolveVaultPathSafe()`
+
+### Error Handling
+
+Path validation errors throw `PathValidationError`, which tool handlers catch and return as structured error responses (never crashes the server).
+
+## Rate Limiting
+
+- OAuth login attempts: 10 per minute per IP
+- Token endpoint requests: 20 per minute per IP
+- Session limit: 100 concurrent MCP sessions
+- Session TTL: 30 minutes of inactivity
+
+## File Size Limits
+
+- Maximum file size for read/write operations: 10 MB
+- Maximum regex length for grep: 500 characters
+
+## Docker Security
+
+- Runtime uses a non-root user (`mcpuser`)
+- Multi-stage build keeps the image minimal
+- Only `git` and `curl` are installed as system dependencies
+
+## Input Validation
+
+- All tool parameters are validated via Zod schemas before the handler executes
+- The MCP SDK enforces JSON Schema validation on tool inputs
+- Git config values are validated to prevent argument injection (no leading `-`)
+- Git credential URLs are sanitized from error messages
