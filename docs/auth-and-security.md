@@ -42,23 +42,42 @@ All file paths are validated by `resolveVaultPath()` (sync) and `resolveVaultPat
 
 Path validation errors throw `PathValidationError`, which tool handlers catch and return as structured error responses (never crashes the server).
 
+## Reverse Proxy (`trust proxy`)
+
+Express is configured with `app.set("trust proxy", 1)` to trust the first reverse proxy (Caddy). This ensures `req.ip` returns the real client IP (from `X-Forwarded-For`) instead of Caddy's Docker-internal IP, which is essential for per-client rate limiting.
+
+## Security Headers (Caddy)
+
+Caddy adds the following security headers to all responses:
+
+- `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` (HSTS)
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Server` header is removed
+
 ## Rate Limiting
 
-- OAuth session store: 10-minute TTL, one-time use
+- OAuth session store: 1000 max pending sessions, 10-minute TTL, one-time use
+- Client registration: 10 per minute per IP, 500 max clients
 - Token endpoint requests: 20 per minute per IP
 - Session limit: 100 concurrent MCP sessions
 - Session TTL: 30 minutes of inactivity
+- Rate-limit maps are periodically pruned (60s interval) to prevent memory leaks
 
 ## File Size Limits
 
 - Maximum file size for read/write operations: 10 MB
 - Maximum regex length for grep: 500 characters
 
-## Docker Security
+## Docker & Network Security
 
 - Runtime uses a non-root user (`mcpuser`)
 - Multi-stage build keeps the image minimal
 - Only `git` and `curl` are installed as system dependencies
+- In production: MCP container is only accessible via Docker-internal network (`expose: 3000`, no `ports`)
+- Caddy is the only container with public port exposure (80/443)
+- `Caddyfile` is mounted read-only (`:ro`)
+- `caddy_data` volume persists certificates to avoid Let's Encrypt rate limits
 
 ## Input Validation
 

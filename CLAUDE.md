@@ -68,20 +68,51 @@ npm test
 All tests must pass (currently 67 tests across 4 suites). If tests fail, fix the root cause — do not skip or disable tests.
 
 ### 3. Security Review
-Perform a focused security review of all changed files. Check for:
-- Path traversal / directory escape
-- Injection risks (template injection, command injection, SQL injection)
-- Authentication / authorization bypasses
-- Information disclosure
-- Input validation gaps
-- Cache poisoning or DoS vectors
+
+**Security reviews MUST be delegated to an independent subagent** (via the Task tool with `subagent_type: "general-purpose"`). The reviewing agent must be briefed as an independent security auditor who relentlessly identifies all issues — in application code, OAuth flows, infrastructure configuration, and Docker/proxy setup. The developer who wrote the code must NOT review their own changes; an independent agent provides the objectivity needed to catch blind spots.
+
+#### Subagent briefing template
+
+The security review agent must be instructed to:
+
+1. **Read ALL changed source files** (not just diffs — full files for context)
+2. **Read related files** that interact with the changes (e.g., if OAuth changed, also read transport.ts, config.ts, metadata.ts)
+3. **Perform two layers of review:**
+
+**Layer 1 — Focused review of changed files:**
+- Path traversal / directory escape (glob patterns, symlinks, `..` in user input)
+- Injection risks (command injection via git args, template injection in string replacement)
+- Authentication / authorization bypasses (missing auth checks, session fixation)
+- Information disclosure (secrets in logs, error messages leaking internals)
+- Input validation gaps (missing type checks, unbounded strings, array vs string confusion)
+- DoS vectors (unbounded memory growth, missing caps on Maps/stores, missing timeouts on fetch, ReDoS)
+- Open redirects (user-controlled redirect URIs not validated against allowlist)
 - OWASP Top 10 relevance
+
+**Layer 2 — Holistic review of how changes interact with the full stack:**
+- **Infrastructure**: Does the change affect Caddy, Docker, port exposure, TLS termination?
+- **OAuth flow end-to-end**: Does the change break or weaken any step in Claude→Server→GitHub→Callback→Token?
+- **Proxy interaction**: Does `req.ip` / `trust proxy` / rate limiting still work correctly behind Caddy?
+- **Security headers**: Are HSTS, X-Frame-Options, X-Content-Type-Options still applied via Caddy?
+- **Secret handling**: Are env vars, JWT secrets, GitHub credentials properly isolated between containers?
+- **Volume/mount security**: Are file mounts read-only where possible? Can mounted paths escape the intended scope?
+- **Network exposure**: Is the MCP server only accessible via the internal Docker network (not directly from the internet)?
+
+4. **Classify every finding** with severity, file, line reference, and description
+5. **List positive security properties** that were verified and are correctly implemented
+6. The agent must be told: "This is a RESEARCH task — do NOT modify any files."
+
+#### Severity classification
+- **CRITICAL/HIGH**: Fix immediately — auth bypass, RCE, secret leakage
+- **MEDIUM**: Fix before committing — path traversal, broken rate limiting, missing timeouts, unbounded stores
+- **LOW**: Document as accepted — theoretical TOCTOU, ReDoS with length limit, PII in logs
+- **INFO**: Note for awareness — in-memory state loss on restart, cosmetic issues
 
 Fix any HIGH or MEDIUM findings before committing. Document any accepted LOW/INFO findings.
 
 ### Execution Order
 1. `npm run build` — fix type errors
 2. `npm test` — fix failing tests
-3. Security review — fix vulnerabilities
+3. Security review (focused + holistic) — fix vulnerabilities
 4. Repeat steps 1-3 if fixes were needed
 5. Only then: commit and push

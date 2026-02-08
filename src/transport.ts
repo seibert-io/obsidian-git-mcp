@@ -27,6 +27,9 @@ export async function startHttpServer(
 ): Promise<void> {
   const app = express();
 
+  // Trust the first reverse proxy (Caddy) for correct req.ip in rate limiting
+  app.set("trust proxy", 1);
+
   // --- OAuth 2.1 endpoints (no auth required) ---
   app.get("/.well-known/oauth-authorization-server", handleMetadata(config));
   app.post("/oauth/register", express.json(), handleRegistration());

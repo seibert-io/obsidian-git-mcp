@@ -10,6 +10,7 @@ A Dockerized [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) se
 - **GitHub OAuth** — authenticate via GitHub, with username allowlist
 - **OAuth 2.1** with PKCE and Dynamic Client Registration for Claude.ai
 - **Path sandboxing** — all operations are confined to the vault directory
+- **HTTPS via Caddy** — automatic Let's Encrypt certificates in production
 - **Docker-ready** — multi-stage build, non-root user, health checks
 
 ## Quick Start
@@ -112,7 +113,8 @@ volumes:
 | `GITHUB_CLIENT_SECRET` | yes | — | GitHub OAuth App Client Secret |
 | `ALLOWED_GITHUB_USERS` | yes | — | Comma-separated allowed GitHub usernames |
 | `JWT_SECRET` | yes | — | JWT signing secret (min 32 chars) |
-| `SERVER_URL` | yes | — | Public server URL |
+| `SERVER_URL` | yes* | — | Public server URL (auto-derived in production from `SERVER_DOMAIN`) |
+| `SERVER_DOMAIN` | yes (prod) | — | Domain for HTTPS via Caddy (e.g., `vault.example.com`) |
 | `GIT_BRANCH` | no | `main` | Git branch to sync |
 | `GIT_SYNC_INTERVAL_SECONDS` | no | `300` | Pull interval (0 to disable) |
 | `GIT_USER_NAME` | no | `Claude MCP` | Git commit author name |
@@ -176,6 +178,100 @@ docker compose up -d
 - **GitHub zeigt "The redirect_uri is not valid"**: Die Callback-URL in der GitHub OAuth App stimmt nicht mit `SERVER_URL/oauth/github/callback` überein.
 - **Claude.ai zeigt einen Verbindungsfehler**: Prüfe ob der Server erreichbar ist und HTTPS korrekt konfiguriert ist.
 
+## Production Deployment (HTTPS)
+
+### Voraussetzungen
+
+- Ein Server mit öffentlicher IP (VPS, Cloud VM, etc.)
+- Eine Domain, deren DNS-A-Record auf diese IP zeigt
+- Port 80 und 443 offen (Firewall/Security Group)
+- Docker und Docker Compose installiert
+
+### 1. DNS einrichten
+
+Erstelle einen A-Record bei deinem DNS-Provider:
+
+```
+vault.example.com → <deine-server-ip>
+```
+
+Warte bis der DNS-Eintrag propagiert ist (prüfen mit `dig vault.example.com`).
+
+### 2. GitHub OAuth App konfigurieren
+
+Stelle sicher, dass in deiner GitHub OAuth App die URLs korrekt sind:
+
+- **Homepage URL**: `https://vault.example.com`
+- **Authorization callback URL**: `https://vault.example.com/oauth/github/callback`
+
+### 3. Environment konfigurieren
+
+```bash
+cp .env.example .env
+```
+
+Mindestens:
+
+```bash
+SERVER_DOMAIN=vault.example.com
+GITHUB_CLIENT_ID=<deine-client-id>
+GITHUB_CLIENT_SECRET=<dein-client-secret>
+ALLOWED_GITHUB_USERS=<dein-github-username>
+JWT_SECRET=<zufälliger-string-mindestens-64-zeichen>
+GIT_REPO_URL=https://<PAT>@github.com/<user>/<vault-repo>.git
+```
+
+Tipp: JWT_SECRET generieren:
+
+```bash
+openssl rand -hex 64
+```
+
+### 4. Starten
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Caddy holt automatisch ein Let's Encrypt Zertifikat. Das dauert beim ersten Start ca. 10-30 Sekunden.
+
+### 5. Prüfen
+
+```bash
+# HTTPS erreichbar?
+curl https://vault.example.com/.well-known/oauth-authorization-server
+
+# Caddy Logs (Cert-Status)
+docker compose -f docker-compose.prod.yml logs caddy
+
+# MCP Server Logs
+docker compose -f docker-compose.prod.yml logs mcp
+```
+
+### 6. In Claude.ai verbinden
+
+1. Gehe zu https://claude.ai → Settings → Connectors
+2. Klicke **"Add custom connector"**
+3. URL: `https://vault.example.com`
+4. Claude leitet dich zu GitHub weiter — anmelden — fertig
+
+### Troubleshooting
+
+- **Caddy zeigt "permission denied" auf Port 80/443**: Ports sind belegt oder Firewall blockiert.
+- **"ACME challenge failed"**: DNS zeigt noch nicht auf den Server. Prüfe mit `dig vault.example.com`.
+- **Let's Encrypt Rate Limit**: Passiert nur bei sehr häufigen Neustarts ohne `caddy_data` Volume. Nie das Volume löschen.
+- **Lokal testen ohne Domain**: Nutze `docker compose up` (ohne `-f prod`) für direkten HTTP-Zugriff auf Port 3000.
+
+### Development vs. Production
+
+| | Development | Production |
+|---|---|---|
+| Compose-Datei | `docker-compose.yml` | `docker-compose.prod.yml` |
+| Zugriff | `http://localhost:3000` | `https://vault.example.com` |
+| HTTPS | Nein | Ja (automatisch via Caddy) |
+| Certs | — | Let's Encrypt (automatisch) |
+| Ports offen | 3000 | 80, 443 |
+
 ## Private Repository Access
 
 **HTTPS with Personal Access Token:**
@@ -194,18 +290,23 @@ docker run -d -p 3000:3000 \
 ## How It Works
 
 ```
-Obsidian (iPhone/Mac)          Docker Container
-┌─────────────────┐           ┌──────────────────────────┐
-│  Obsidian +      │  git     │  Git Sync (periodic)     │
-│  Obsidian Git    │ ◄──────► │       ↕ /vault           │
-│  Plugin          │          │  MCP Server (Express)     │
-└─────────────────┘           │  - OAuth 2.1 auth        │
-                              │  - 14 MCP tools          │
-Claude.ai          SSE/HTTP   │  - Path sandboxing       │
-┌─────────────────┐ ◄──────► │  - Streamable HTTP       │
-│  Claude.ai       │  OAuth   └──────────────────────────┘
-│  Custom MCP      │  JWT
-└─────────────────┘
+Obsidian (iPhone/Mac)          Docker (Production)
+┌─────────────────┐           ┌──────────────────────────────────┐
+│  Obsidian +      │  git     │  ┌────────────────────────────┐  │
+│  Obsidian Git    │ ◄──────► │  │  Git Sync (periodic)       │  │
+│  Plugin          │          │  └──────┬─────────────────────┘  │
+└─────────────────┘           │         ↕ /vault                  │
+                              │  ┌──────────────────────────┐    │
+Claude.ai          HTTPS      │  │  MCP Server (Express:3000)│    │
+┌─────────────────┐ ◄──────► │  │  - OAuth 2.1 + GitHub     │    │
+│  Claude.ai       │  :443   │  │  - 14 MCP tools           │    │
+│  Custom MCP      │         │  └──────────────────────────┘    │
+└─────────────────┘          │         ↑ reverse_proxy           │
+                              │  ┌──────────────────────────┐    │
+                              │  │  Caddy (:80/:443)         │    │
+                              │  │  - Auto Let's Encrypt     │    │
+                              │  └──────────────────────────┘    │
+                              └──────────────────────────────────┘
 ```
 
 1. **Obsidian** syncs your vault to a Git repository (via Obsidian Git plugin)

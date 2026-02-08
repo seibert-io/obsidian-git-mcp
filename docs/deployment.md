@@ -20,12 +20,19 @@ docker run -d \
   obsidian-mcp-server
 ```
 
-### Docker Compose
+### Docker Compose (Development)
 ```bash
 docker compose up -d
 ```
 
 Edit `docker-compose.yml` to set environment variables. A template is provided with all variables.
+
+### Docker Compose (Production with HTTPS)
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+The production compose file adds a Caddy reverse proxy that automatically obtains Let's Encrypt certificates. Set `SERVER_DOMAIN` in your `.env` file. See the [Production Deployment](#production-deployment-https) section below.
 
 ## Build Arguments and Runtime Environment Variables
 
@@ -40,7 +47,8 @@ The Docker image does not require build arguments. All configuration is via runt
 | `GITHUB_CLIENT_SECRET` | GitHub OAuth App Client Secret. |
 | `ALLOWED_GITHUB_USERS` | Comma-separated list of allowed GitHub usernames (case-insensitive). |
 | `JWT_SECRET` | HMAC secret for JWT access tokens (min 32 chars). |
-| `SERVER_URL` | Public URL of the server, used in OAuth metadata (e.g., `https://mcp.example.com`). |
+| `SERVER_URL` | Public URL of the server, used in OAuth metadata. Auto-derived in production from `SERVER_DOMAIN`. |
+| `SERVER_DOMAIN` | Domain for HTTPS via Caddy (production only, e.g., `vault.example.com`). |
 
 ### Optional Environment Variables
 
@@ -64,6 +72,39 @@ The Docker image does not require build arguments. All configuration is via runt
 - **Non-root user**: `mcpuser` for runtime
 - **Health check**: `curl -f http://localhost:3000/health` every 30s
 - **Exposed port**: 3000
+
+## Production Deployment (HTTPS)
+
+The production setup uses [Caddy](https://caddyserver.com/) as a reverse proxy with automatic Let's Encrypt HTTPS certificates.
+
+### Architecture
+
+```
+Internet → :443 → Caddy (TLS termination) → :3000 → MCP Server
+                   ↕
+           Let's Encrypt (automatic)
+```
+
+### Files
+
+| File | Purpose |
+|---|---|
+| `Caddyfile` | Caddy config — reverse proxies `{$SERVER_DOMAIN}` to `mcp:3000` |
+| `docker-compose.prod.yml` | Production compose with Caddy + MCP (ports 80/443 only) |
+| `docker-compose.yml` | Development compose (port 3000 direct, no HTTPS) |
+
+### How `SERVER_URL` is Derived
+
+In production, `docker-compose.prod.yml` sets `SERVER_URL=https://${SERVER_DOMAIN}` on the MCP container automatically. The user only needs to set `SERVER_DOMAIN` in `.env`. For development without Caddy, `SERVER_URL` must be set directly.
+
+### Volume Persistence
+
+The `caddy_data` volume stores certificates and ACME state. It **must** be persisted across container restarts to avoid hitting Let's Encrypt rate limits. Never delete this volume in production.
+
+### Port Exposure
+
+- **Caddy**: `80:80` and `443:443` (public)
+- **MCP**: `expose: 3000` (internal Docker network only, not accessible from outside)
 
 ## Connecting from Claude.ai (OAuth 2.1)
 

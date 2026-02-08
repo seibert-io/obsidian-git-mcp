@@ -1,3 +1,5 @@
+# Development: Direkter Zugriff ohne HTTPS
+# Für Production mit HTTPS: docker compose -f docker-compose.prod.yml up -d
 services:
   obsidian-mcp:
     build: .
