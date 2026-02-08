@@ -107,7 +107,7 @@ Review the entire application as if seeing it for the first time. Read ALL sourc
 
 4. **Ignore external dependencies** — only review project source code (`src/`, config files, Docker/Caddy files). Do not review code inside `node_modules/` or third-party libraries.
 5. **Classify every finding** with severity, file, line reference, and description
-6. **List positive security properties** that were verified and are correctly implemented
+6. **Report only findings.** Do not list positive properties, verified-correct implementations, or other non-actionable observations. The output should contain exclusively issues that require attention.
 7. The agent must be told: "This is a RESEARCH task — do NOT modify any files."
 
 #### Severity classification
@@ -155,7 +155,7 @@ Review the entire codebase for structural and maintainability issues as if seein
 
 4. **Ignore external dependencies** — only review project source code (`src/`, config files). Do not review code inside `node_modules/` or third-party libraries.
 5. **Classify every finding** with severity, file, line reference, and description
-6. **List positive code quality properties** that were verified and are well-implemented
+6. **Report only findings.** Do not list positive properties, verified-correct implementations, or other non-actionable observations. The output should contain exclusively issues that require attention.
 7. The agent must be told: "This is a RESEARCH task — do NOT modify any files."
 
 #### Severity classification
