@@ -8,11 +8,14 @@ export interface Config {
   port: number;
   logLevel: string;
   // OAuth 2.1
-  oauthPassword: string;
   jwtSecret: string;
   serverUrl: string;
   accessTokenExpirySeconds: number;
   refreshTokenExpirySeconds: number;
+  // GitHub OAuth
+  githubClientId: string;
+  githubClientSecret: string;
+  allowedGithubUsers: string[];
 }
 
 export function loadConfig(): Config {
@@ -49,15 +52,30 @@ export function loadConfig(): Config {
     throw new Error("PORT must be a valid port number (1-65535)");
   }
 
-  // OAuth 2.1
-  const oauthPassword = process.env.OAUTH_PASSWORD;
-  if (!oauthPassword) {
-    throw new Error("OAUTH_PASSWORD environment variable is required");
-  }
-  if (oauthPassword.length < 12) {
-    throw new Error("OAUTH_PASSWORD must be at least 12 characters");
+  // GitHub OAuth
+  const githubClientId = process.env.GITHUB_CLIENT_ID;
+  if (!githubClientId) {
+    throw new Error("GITHUB_CLIENT_ID environment variable is required");
   }
 
+  const githubClientSecret = process.env.GITHUB_CLIENT_SECRET;
+  if (!githubClientSecret) {
+    throw new Error("GITHUB_CLIENT_SECRET environment variable is required");
+  }
+
+  const allowedGithubUsersRaw = process.env.ALLOWED_GITHUB_USERS;
+  if (!allowedGithubUsersRaw || allowedGithubUsersRaw.trim() === "") {
+    throw new Error("ALLOWED_GITHUB_USERS environment variable is required (comma-separated GitHub usernames)");
+  }
+  const allowedGithubUsers = allowedGithubUsersRaw
+    .split(",")
+    .map((u) => u.trim().toLowerCase())
+    .filter((u) => u.length > 0);
+  if (allowedGithubUsers.length === 0) {
+    throw new Error("ALLOWED_GITHUB_USERS must contain at least one username");
+  }
+
+  // OAuth 2.1
   const jwtSecret = process.env.JWT_SECRET;
   if (!jwtSecret) {
     throw new Error("JWT_SECRET environment variable is required");
@@ -96,10 +114,12 @@ export function loadConfig(): Config {
     vaultPath: process.env.VAULT_PATH ?? "/vault",
     port,
     logLevel: process.env.LOG_LEVEL ?? "info",
-    oauthPassword,
     jwtSecret,
     serverUrl: serverUrl.replace(/\/$/, ""), // strip trailing slash
     accessTokenExpirySeconds: accessTokenExpiry,
     refreshTokenExpirySeconds: refreshTokenExpiry,
+    githubClientId,
+    githubClientSecret,
+    allowedGithubUsers,
   };
 }

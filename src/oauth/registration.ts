@@ -30,6 +30,16 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
+/** Remove expired rate-limit entries to prevent slow memory leak. */
+export function cleanupRegistrationRateLimits(): void {
+  const now = Date.now();
+  for (const [ip, entry] of registrationAttempts) {
+    if (now > entry.resetAt) {
+      registrationAttempts.delete(ip);
+    }
+  }
+}
+
 export function handleRegistration() {
   return (req: Request, res: Response): void => {
     const ip = req.ip ?? "unknown";
@@ -51,8 +61,20 @@ export function handleRegistration() {
       token_endpoint_auth_method,
     } = req.body;
 
-    if (!client_name || !redirect_uris || !Array.isArray(redirect_uris) || redirect_uris.length === 0) {
-      res.status(400).json({ error: "invalid_request", error_description: "client_name and redirect_uris are required" });
+    if (!client_name || typeof client_name !== "string") {
+      res.status(400).json({ error: "invalid_request", error_description: "client_name is required and must be a string" });
+      return;
+    }
+    if (client_name.length > 256) {
+      res.status(400).json({ error: "invalid_request", error_description: "client_name too long (max 256 characters)" });
+      return;
+    }
+    if (!redirect_uris || !Array.isArray(redirect_uris) || redirect_uris.length === 0) {
+      res.status(400).json({ error: "invalid_request", error_description: "redirect_uris is required and must be a non-empty array" });
+      return;
+    }
+    if (redirect_uris.length > 10) {
+      res.status(400).json({ error: "invalid_request", error_description: "Too many redirect_uris (max 10)" });
       return;
     }
 
@@ -76,23 +98,27 @@ export function handleRegistration() {
 
     // Validate grant_types against supported values
     const requestedGrantTypes = grant_types ?? ["authorization_code", "refresh_token"];
-    if (Array.isArray(requestedGrantTypes)) {
-      for (const gt of requestedGrantTypes) {
-        if (!SUPPORTED_GRANT_TYPES.includes(gt)) {
-          res.status(400).json({ error: "invalid_request", error_description: `Unsupported grant_type: ${gt}` });
-          return;
-        }
+    if (!Array.isArray(requestedGrantTypes)) {
+      res.status(400).json({ error: "invalid_request", error_description: "grant_types must be an array" });
+      return;
+    }
+    for (const gt of requestedGrantTypes) {
+      if (!SUPPORTED_GRANT_TYPES.includes(gt)) {
+        res.status(400).json({ error: "invalid_request", error_description: `Unsupported grant_type: ${gt}` });
+        return;
       }
     }
 
     // Validate response_types against supported values
     const requestedResponseTypes = response_types ?? ["code"];
-    if (Array.isArray(requestedResponseTypes)) {
-      for (const rt of requestedResponseTypes) {
-        if (!SUPPORTED_RESPONSE_TYPES.includes(rt)) {
-          res.status(400).json({ error: "invalid_request", error_description: `Unsupported response_type: ${rt}` });
-          return;
-        }
+    if (!Array.isArray(requestedResponseTypes)) {
+      res.status(400).json({ error: "invalid_request", error_description: "response_types must be an array" });
+      return;
+    }
+    for (const rt of requestedResponseTypes) {
+      if (!SUPPORTED_RESPONSE_TYPES.includes(rt)) {
+        res.status(400).json({ error: "invalid_request", error_description: `Unsupported response_type: ${rt}` });
+        return;
       }
     }
 

@@ -6,8 +6,11 @@ services:
     environment:
       # Required
       - GIT_REPO_URL=https://github.com/user/obsidian-vault.git
+      # Required — GitHub OAuth
+      - GITHUB_CLIENT_ID=your-github-oauth-app-client-id
+      - GITHUB_CLIENT_SECRET=your-github-oauth-app-client-secret
+      - ALLOWED_GITHUB_USERS=your-github-username
       # Required — OAuth 2.1
-      - OAUTH_PASSWORD=your-vault-authorization-password
       - JWT_SECRET=your-jwt-secret-minimum-32-characters-long
       - SERVER_URL=https://your-server.example.com
       # Optional — OAuth 2.1

@@ -7,6 +7,7 @@ A Dockerized [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) se
 - **14 MCP tools** for reading, writing, searching, and managing vault files
 - **Vault guides & prompts** — teaches Claude Obsidian conventions, templates, and search strategies
 - **Git sync** — automatically clones, pulls, and pushes your vault via Git
+- **GitHub OAuth** — authenticate via GitHub, with username allowlist
 - **OAuth 2.1** with PKCE and Dynamic Client Registration for Claude.ai
 - **Path sandboxing** — all operations are confined to the vault directory
 - **Docker-ready** — multi-stage build, non-root user, health checks
@@ -32,7 +33,9 @@ Edit `.env` with your settings:
 ```bash
 # Required
 GIT_REPO_URL=https://github.com/your-user/your-obsidian-vault.git
-OAUTH_PASSWORD=<choose a strong password (min 12 chars)>
+GITHUB_CLIENT_ID=<from your GitHub OAuth App>
+GITHUB_CLIENT_SECRET=<from your GitHub OAuth App>
+ALLOWED_GITHUB_USERS=your-github-username
 JWT_SECRET=<generate with: openssl rand -hex 32>
 SERVER_URL=https://your-server.example.com
 ```
@@ -61,8 +64,8 @@ curl http://localhost:3000/health
 
 1. In Claude.ai, go to **Settings** and add a **Custom MCP Integration**
 2. Enter your server URL: `https://your-server.example.com`
-3. Claude.ai will automatically discover the OAuth endpoints, register as a client, and redirect you to authorize
-4. Enter your `OAUTH_PASSWORD` when prompted
+3. Claude.ai will automatically discover the OAuth endpoints, register as a client, and redirect you to GitHub
+4. Sign in with a GitHub account that is in your `ALLOWED_GITHUB_USERS` list
 5. The vault tools will appear in Claude's tool list
 
 ## Available Tools
@@ -105,7 +108,9 @@ volumes:
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `GIT_REPO_URL` | yes | — | Git remote URL (HTTPS or SSH) |
-| `OAUTH_PASSWORD` | yes | — | Authorization page password (min 12 chars) |
+| `GITHUB_CLIENT_ID` | yes | — | GitHub OAuth App Client ID |
+| `GITHUB_CLIENT_SECRET` | yes | — | GitHub OAuth App Client Secret |
+| `ALLOWED_GITHUB_USERS` | yes | — | Comma-separated allowed GitHub usernames |
 | `JWT_SECRET` | yes | — | JWT signing secret (min 32 chars) |
 | `SERVER_URL` | yes | — | Public server URL |
 | `GIT_BRANCH` | no | `main` | Git branch to sync |
@@ -117,6 +122,59 @@ volumes:
 | `LOG_LEVEL` | no | `info` | Log level: debug, info, warn, error |
 | `ACCESS_TOKEN_EXPIRY_SECONDS` | no | `3600` | JWT token lifetime |
 | `REFRESH_TOKEN_EXPIRY_SECONDS` | no | `604800` | Refresh token lifetime (7 days) |
+
+## GitHub OAuth einrichten
+
+Der Server authentifiziert User über GitHub. Nur explizit freigegebene GitHub-Accounts erhalten Zugriff.
+
+### 1. GitHub OAuth App erstellen
+
+1. Gehe zu https://github.com/settings/developers
+2. Klicke auf **"New OAuth App"**
+3. Fülle die Felder aus:
+   - **Application name**: `Obsidian MCP Server` (frei wählbar)
+   - **Homepage URL**: Die öffentliche URL deines Servers, z.B. `https://vault.example.com`
+   - **Authorization callback URL**: `https://vault.example.com/oauth/github/callback`
+     (Ersetze `vault.example.com` mit deiner tatsächlichen Server-URL)
+4. Klicke **"Register application"**
+5. Auf der nächsten Seite siehst du die **Client ID** — kopiere sie
+6. Klicke auf **"Generate a new client secret"** — kopiere das Secret sofort (wird nur einmal angezeigt)
+
+### 2. Environment Variables konfigurieren
+
+Trage die Werte in deine `.env` oder `docker-compose.yml` ein:
+
+```
+GITHUB_CLIENT_ID=<Client ID von Schritt 5>
+GITHUB_CLIENT_SECRET=<Client Secret von Schritt 6>
+ALLOWED_GITHUB_USERS=dein-github-username
+```
+
+Für mehrere User komma-separiert:
+
+```
+ALLOWED_GITHUB_USERS=user1,user2,user3
+```
+
+### 3. Server starten
+
+```bash
+docker compose up -d
+```
+
+### 4. In Claude.ai verbinden
+
+1. Gehe zu https://claude.ai → Settings → Connectors
+2. Klicke **"Add custom connector"**
+3. Gib die Server-URL ein: `https://vault.example.com`
+4. Claude leitet dich zu GitHub weiter — melde dich an
+5. Nach erfolgreicher Anmeldung ist der Connector aktiv
+
+### Troubleshooting
+
+- **"User not authorized"**: Dein GitHub-Username ist nicht in `ALLOWED_GITHUB_USERS` enthalten. Prüfe die Schreibweise (case-insensitive).
+- **GitHub zeigt "The redirect_uri is not valid"**: Die Callback-URL in der GitHub OAuth App stimmt nicht mit `SERVER_URL/oauth/github/callback` überein.
+- **Claude.ai zeigt einen Verbindungsfehler**: Prüfe ob der Server erreichbar ist und HTTPS korrekt konfiguriert ist.
 
 ## Private Repository Access
 
@@ -167,13 +225,13 @@ npm run lint      # Type-check
 
 ## Security
 
+- GitHub OAuth authentication with username allowlist
 - OAuth 2.1 with PKCE S256 and Dynamic Client Registration
 - JWT access tokens with configurable expiry
 - Refresh token rotation
-- Timing-safe token comparisons
 - Path traversal and symlink escape prevention
 - `.git` directory access blocked
-- Rate limiting on login and token endpoints
+- Rate limiting on registration and token endpoints
 - Non-root Docker container
 - Git credential sanitization in error messages
 - File size limits (10 MB) and regex length limits
@@ -185,7 +243,7 @@ Detailed documentation is available in `docs/`:
 | File | Contents |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | System design, component diagram, request flow |
-| [docs/tools.md](docs/tools.md) | All 13 MCP tool definitions with inputs/outputs |
+| [docs/tools.md](docs/tools.md) | All 14 MCP tool definitions with inputs/outputs |
 | [docs/oauth.md](docs/oauth.md) | OAuth 2.1 flow, DCR, PKCE, JWT, endpoints |
 | [docs/git-sync.md](docs/git-sync.md) | Git clone/pull/push logic, conflict handling |
 | [docs/auth-and-security.md](docs/auth-and-security.md) | Authentication, path security, rate limiting |

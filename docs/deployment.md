@@ -12,7 +12,9 @@ docker build -t obsidian-mcp-server .
 docker run -d \
   -p 3000:3000 \
   -e GIT_REPO_URL=https://github.com/user/vault.git \
-  -e OAUTH_PASSWORD=your-vault-password \
+  -e GITHUB_CLIENT_ID=your-github-client-id \
+  -e GITHUB_CLIENT_SECRET=your-github-client-secret \
+  -e ALLOWED_GITHUB_USERS=your-github-username \
   -e JWT_SECRET=$(openssl rand -hex 32) \
   -e SERVER_URL=https://your-server.example.com \
   obsidian-mcp-server
@@ -34,7 +36,9 @@ The Docker image does not require build arguments. All configuration is via runt
 | Variable | Description |
 |---|---|
 | `GIT_REPO_URL` | Git remote URL for the Obsidian vault. |
-| `OAUTH_PASSWORD` | Password users enter on the OAuth authorization page (min 12 chars). |
+| `GITHUB_CLIENT_ID` | GitHub OAuth App Client ID. |
+| `GITHUB_CLIENT_SECRET` | GitHub OAuth App Client Secret. |
+| `ALLOWED_GITHUB_USERS` | Comma-separated list of allowed GitHub usernames (case-insensitive). |
 | `JWT_SECRET` | HMAC secret for JWT access tokens (min 32 chars). |
 | `SERVER_URL` | Public URL of the server, used in OAuth metadata (e.g., `https://mcp.example.com`). |
 
@@ -70,7 +74,7 @@ The Docker image does not require build arguments. All configuration is via runt
 5. Claude.ai will:
    - Discover endpoints via `/.well-known/oauth-authorization-server`
    - Register as a client via `POST /oauth/register`
-   - Redirect you to the authorization page where you enter your `OAUTH_PASSWORD`
+   - Redirect you to GitHub where you sign in with an allowed account
    - Exchange the auth code for tokens automatically
 6. The MCP tools will appear in Claude's tool list
 

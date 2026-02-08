@@ -23,6 +23,16 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
+/** Remove expired rate-limit entries to prevent slow memory leak. */
+export function cleanupTokenRateLimits(): void {
+  const now = Date.now();
+  for (const [ip, entry] of tokenAttempts) {
+    if (now > entry.resetAt) {
+      tokenAttempts.delete(ip);
+    }
+  }
+}
+
 function verifyPkce(codeVerifier: string, codeChallenge: string): boolean {
   const hash = crypto.createHash("sha256").update(codeVerifier).digest();
   const computed = hash.toString("base64url");

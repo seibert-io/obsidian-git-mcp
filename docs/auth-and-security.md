@@ -8,6 +8,12 @@ All requests to `/mcp` must include an `Authorization: Bearer <token>` header wi
 
 Unauthenticated endpoints: `/health`, `/.well-known/oauth-authorization-server`, `/oauth/*`.
 
+### GitHub OAuth (`src/oauth/authorize.ts`, `src/oauth/githubCallback.ts`)
+
+Instead of a password login page, the authorization endpoint redirects users to GitHub for authentication. After GitHub authentication, the server checks the user's GitHub username against the `ALLOWED_GITHUB_USERS` allowlist (case-insensitive). Only whitelisted users receive an authorization code.
+
+The session between the authorize redirect and the GitHub callback is bridged via `sessionStore.ts` (in-memory, 10-minute TTL, one-time use).
+
 ### OAuth 2.1 (`src/oauth/`)
 
 Full OAuth 2.1 implementation with PKCE (S256) and Dynamic Client Registration. See `docs/oauth.md` for details.
@@ -38,7 +44,7 @@ Path validation errors throw `PathValidationError`, which tool handlers catch an
 
 ## Rate Limiting
 
-- OAuth login attempts: 10 per minute per IP
+- OAuth session store: 10-minute TTL, one-time use
 - Token endpoint requests: 20 per minute per IP
 - Session limit: 100 concurrent MCP sessions
 - Session TTL: 30 minutes of inactivity

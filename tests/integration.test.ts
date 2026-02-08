@@ -27,11 +27,13 @@ const testConfig: Config = {
   vaultPath: TEST_VAULT,
   port: 0,
   logLevel: "error",
-  oauthPassword: "test-oauth-password",
   jwtSecret: "test-jwt-secret-that-is-at-least-32-chars-long",
   serverUrl: "http://localhost:3000",
   accessTokenExpirySeconds: 3600,
   refreshTokenExpirySeconds: 604800,
+  githubClientId: "test-github-client-id",
+  githubClientSecret: "test-github-client-secret",
+  allowedGithubUsers: ["testuser"],
 };
 
 describe("Integration: MCP Server over Streamable HTTP", () => {

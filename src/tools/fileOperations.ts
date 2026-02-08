@@ -84,6 +84,10 @@ export function registerFileOperations(server: McpServer, config: Config): void 
     async ({ path: filePath, old_text, new_text }) => {
       try {
         const resolved = await resolveVaultPathSafe(config.vaultPath, filePath);
+        const fileStat = await stat(resolved);
+        if (fileStat.size > MAX_FILE_SIZE) {
+          return toolError(`File too large to edit (${fileStat.size} bytes, max ${MAX_FILE_SIZE})`);
+        }
         const content = await readFile(resolved, "utf-8");
 
         const occurrences = content.split(old_text).length - 1;

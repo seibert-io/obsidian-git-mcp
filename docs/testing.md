@@ -36,18 +36,54 @@ End-to-end test that starts a real MCP server over Streamable HTTP (9 tests):
 
 ### OAuth (`tests/oauth.test.ts`)
 
-Tests for the full OAuth 2.1 implementation (13 tests):
+Tests for the full OAuth 2.1 implementation with GitHub authentication (30 tests):
+
+**Server metadata & registration (3 tests):**
 - Server metadata endpoint returns correct RFC 8414 data
 - Dynamic Client Registration (DCR) — success and failure cases
 - Redirect URI validation (HTTPS required, allowed hosts only)
-- Authorization page rendering
-- Full authorization_code flow with PKCE S256
-- Token exchange and refresh token rotation
-- Wrong password rejection
-- PKCE verification failure
+
+**Authorization & GitHub redirect (2 tests):**
+- Authorize endpoint redirects to GitHub with correct parameters
+- Missing/invalid authorize parameters return 400
+
+**Session bridge (9 tests):**
+- Creates unique session per authorize request (different keys)
+- Session consumed on first callback (second callback returns 400)
+- Preserves original Claude `state` across GitHub redirect
+- Preserves original `redirect_uri` across GitHub redirect
+- Preserves PKCE `code_challenge` for token exchange (correct verifier succeeds, wrong verifier fails)
+- Invalid/missing/expired state → 400
+- Missing code parameter → 400
+- Unknown session key → 400
+- GitHub error parameter → 400
+
+**Username allowlist (3 tests):**
+- Case-insensitive username match allows access
+- Non-allowed username redirects with `error=access_denied`
+- Unit test: `isAllowedUser()` with various casings
+
+**GitHub API error handling (2 tests):**
+- Token exchange failure returns 502
+- User info fetch failure returns 502
+
+**Full E2E flow (3 tests):**
+- Register → authorize → GitHub callback → token exchange → MCP request → refresh token
 - Auth code reuse prevention (one-time use)
-- JWT auth middleware (valid JWT, invalid token)
+- JWT middleware (valid JWT accepted, invalid token rejected)
+
+**Token endpoint (1 test):**
 - Unsupported grant type rejection
+
+**OAuthSessionStore unit tests (4 tests):**
+- Create + consume returns session data
+- Consumed session cannot be reused (one-time use)
+- Unknown key returns null
+- Multiple sessions get unique keys
+
+**Mocking strategy:** GitHub API calls (`github.com/login/oauth/access_token` and `api.github.com/user`) are intercepted via `globalThis.fetch` override. Local test server requests pass through to the original fetch. No real HTTP requests leave the test process.
+
+**Rate limit handling:** A shared client is registered once in `beforeAll` and reused across all tests to stay within the DCR rate limit (10/min per IP).
 
 ### Guides & Prompts (`tests/guides.test.ts`)
 

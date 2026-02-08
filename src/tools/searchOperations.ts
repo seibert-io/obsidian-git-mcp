@@ -18,6 +18,23 @@ function toolSuccess(text: string) {
   return { content: [{ type: "text" as const, text }] };
 }
 
+/**
+ * Validate a glob pattern to prevent path traversal.
+ * Rejects patterns containing `..` segments or absolute paths.
+ */
+function validateGlobPattern(pattern: string): string | null {
+  // Reject absolute paths
+  if (path.isAbsolute(pattern)) {
+    return "Glob pattern must not be an absolute path";
+  }
+  // Reject `..` path traversal in any segment
+  const segments = pattern.split(/[/\\]/);
+  if (segments.some((s) => s === "..")) {
+    return "Glob pattern must not contain '..' path traversal";
+  }
+  return null;
+}
+
 export function registerSearchOperations(server: McpServer, config: Config): void {
   // search_files
   server.registerTool(
@@ -31,6 +48,8 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
     },
     async ({ pattern, path: searchPath }) => {
       try {
+        const patternError = validateGlobPattern(pattern);
+        if (patternError) return toolError(patternError);
         const resolved = resolveVaultPath(config.vaultPath, searchPath);
         const matches = await fg(pattern, {
           cwd: resolved,
@@ -77,6 +96,8 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
 
         // Find files to search
         const globPattern = include_pattern ?? "**/*";
+        const globError = validateGlobPattern(globPattern);
+        if (globError) return toolError(globError);
         const files = await fg(globPattern, {
           cwd: resolved,
           dot: false,
@@ -165,6 +186,8 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
       try {
         const resolved = resolveVaultPath(config.vaultPath, searchPath);
         const globPattern = name ?? "**/*";
+        const globError = validateGlobPattern(globPattern);
+        if (globError) return toolError(globError);
         const files = await fg(globPattern, {
           cwd: resolved,
           dot: false,

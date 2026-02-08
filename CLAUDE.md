@@ -33,7 +33,7 @@ Load the relevant doc file when working on a specific domain:
 
 - **Entry point**: `src/index.ts` → loads config → inits vault → starts server
 - **Transport**: Streamable HTTP with stateful sessions (each client gets a `StreamableHTTPServerTransport`)
-- **Auth**: OAuth 2.1 JWT auth on `/mcp`; `/health` and `/oauth/*` are unauthenticated
+- **Auth**: OAuth 2.1 with GitHub authentication; JWT auth on `/mcp`; `/health` and `/oauth/*` are unauthenticated
 - **Guides**: `get_obsidian_guide` tool + MCP prompts; source files in `prompts/` (overridable via volume mount)
 - **Path safety**: All paths validated by `resolveVaultPath()` in `src/utils/pathValidation.ts`
 - **Git writes**: Every write operation triggers `git add . && git commit && git push`
@@ -65,7 +65,7 @@ The TypeScript build must complete without errors. Fix all type errors before pr
 ```bash
 npm test
 ```
-All tests must pass (currently 50 tests across 4 suites). If tests fail, fix the root cause — do not skip or disable tests.
+All tests must pass (currently 67 tests across 4 suites). If tests fail, fix the root cause — do not skip or disable tests.
 
 ### 3. Security Review
 Perform a focused security review of all changed files. Check for:

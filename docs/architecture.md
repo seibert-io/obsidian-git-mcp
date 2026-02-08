@@ -31,13 +31,16 @@ The Obsidian Vault MCP Server is a Dockerized Node.js application that exposes a
 5. Tool handler validates paths, performs FS operations, optionally triggers git commit+push
 6. Response flows back through the transport as SSE events
 
-### OAuth 2.1 Flow
+### OAuth 2.1 Flow (with GitHub Authentication)
 
 1. Client registers via `POST /oauth/register` (Dynamic Client Registration)
 2. Client redirects user to `GET /oauth/authorize` with PKCE challenge
-3. User enters vault password, server redirects back with auth code
-4. Client exchanges code + PKCE verifier at `POST /oauth/token` for JWT + refresh token
-5. Client uses JWT to call `/mcp`
+3. Server saves session (client_id, redirect_uri, state, code_challenge) and redirects to GitHub
+4. User authenticates at GitHub; GitHub redirects back to `GET /oauth/github/callback`
+5. Server exchanges GitHub code for token, fetches user info, checks username allowlist
+6. Server generates auth code and redirects back to Claude with code + original state
+7. Client exchanges code + PKCE verifier at `POST /oauth/token` for JWT + refresh token
+8. Client uses JWT to call `/mcp`
 
 ## Key Design Decisions
 
@@ -58,7 +61,11 @@ src/
 ├── oauth/
 │   ├── metadata.ts         # /.well-known/oauth-authorization-server
 │   ├── registration.ts     # POST /oauth/register (DCR)
-│   ├── authorize.ts        # GET/POST /oauth/authorize
+│   ├── authorize.ts        # GET /oauth/authorize → saves session → redirects to GitHub
+│   ├── githubCallback.ts   # GET /oauth/github/callback → allowlist check → redirect to Claude
+│   ├── githubClient.ts     # GitHub token exchange + user info fetch
+│   ├── sessionStore.ts     # In-memory session store for OAuth bridge (10-min TTL, one-time use)
+│   ├── allowlist.ts        # GitHub username allowlist check (case-insensitive)
 │   ├── token.ts            # POST /oauth/token
 │   ├── jwt.ts              # JWT create/verify helpers
 │   └── store.ts            # In-memory client, code, token storage

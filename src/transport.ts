@@ -4,10 +4,12 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { jwtAuth } from "./auth.js";
 import { handleMetadata } from "./oauth/metadata.js";
-import { handleRegistration } from "./oauth/registration.js";
-import { handleAuthorizeGet, handleAuthorizePost } from "./oauth/authorize.js";
-import { handleToken } from "./oauth/token.js";
+import { handleRegistration, cleanupRegistrationRateLimits } from "./oauth/registration.js";
+import { handleAuthorizeGet } from "./oauth/authorize.js";
+import { handleGitHubCallback } from "./oauth/githubCallback.js";
+import { handleToken, cleanupTokenRateLimits } from "./oauth/token.js";
 import { oauthStore } from "./oauth/store.js";
+import { oauthSessionStore } from "./oauth/sessionStore.js";
 import { logger } from "./utils/logger.js";
 import type { Config } from "./config.js";
 
@@ -29,7 +31,7 @@ export async function startHttpServer(
   app.get("/.well-known/oauth-authorization-server", handleMetadata(config));
   app.post("/oauth/register", express.json(), handleRegistration());
   app.get("/oauth/authorize", handleAuthorizeGet(config));
-  app.post("/oauth/authorize", express.urlencoded({ extended: false }), handleAuthorizePost(config));
+  app.get("/oauth/github/callback", handleGitHubCallback(config));
   app.post("/oauth/token", express.urlencoded({ extended: false }), handleToken(config));
 
   // Auth middleware for all /mcp routes (OAuth 2.1 JWT only)
@@ -54,6 +56,9 @@ export async function startHttpServer(
       }
     }
     oauthStore.cleanup();
+    oauthSessionStore.cleanup();
+    cleanupRegistrationRateLimits();
+    cleanupTokenRateLimits();
   }, 60_000);
 
   // Handle POST requests to /mcp (main MCP endpoint)

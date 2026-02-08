@@ -7,7 +7,9 @@ All configuration is via environment variables, parsed in `src/config.ts`.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `GIT_REPO_URL` | yes | — | Git remote URL (HTTPS or SSH) |
-| `OAUTH_PASSWORD` | yes | — | Password for the OAuth authorization login page (min 12 chars) |
+| `GITHUB_CLIENT_ID` | yes | — | GitHub OAuth App Client ID |
+| `GITHUB_CLIENT_SECRET` | yes | — | GitHub OAuth App Client Secret |
+| `ALLOWED_GITHUB_USERS` | yes | — | Comma-separated list of allowed GitHub usernames (case-insensitive) |
 | `JWT_SECRET` | yes | — | Secret for signing JWT access tokens (min 32 chars) |
 | `SERVER_URL` | yes | — | Public URL of the server (e.g., `https://mcp.example.com`) |
 | `GIT_BRANCH` | no | `main` | Branch to sync |
@@ -37,14 +39,14 @@ GIT_REPO_URL=git@github.com:user/vault.git
 ```bash
 # JWT_SECRET (min 32 chars)
 openssl rand -hex 32
-
-# OAUTH_PASSWORD — choose a strong password (min 12 chars)
 ```
+
+GitHub OAuth credentials are obtained by creating an OAuth App at https://github.com/settings/developers.
 
 ## Validation
 
-- `GIT_REPO_URL`, `OAUTH_PASSWORD`, `JWT_SECRET`, and `SERVER_URL` are required; startup fails if missing
-- `OAUTH_PASSWORD` must be at least 12 characters
+- `GIT_REPO_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_USERS`, `JWT_SECRET`, and `SERVER_URL` are required; startup fails if missing
+- `ALLOWED_GITHUB_USERS` must contain at least one username (stored lowercase internally)
 - `JWT_SECRET` must be at least 32 characters
 - `GIT_SYNC_INTERVAL_SECONDS` must be a non-negative integer
 - `PORT` must be a valid port number (1-65535)
