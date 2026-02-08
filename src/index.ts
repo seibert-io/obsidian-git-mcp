@@ -25,12 +25,13 @@ async function main(): Promise<void> {
   const mcpServer = createMcpServer(config);
 
   // Start HTTP transport
-  await startHttpServer(mcpServer, config);
+  const httpServer = await startHttpServer(mcpServer, config);
 
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("Shutting down...");
     stopPeriodicSync();
+    await httpServer.close();
     await mcpServer.close();
     process.exit(0);
   };

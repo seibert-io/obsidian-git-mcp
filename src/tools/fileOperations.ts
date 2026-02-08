@@ -5,17 +5,10 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { resolveVaultPathSafe } from "../utils/pathValidation.js";
 import { commitAndPush } from "../git/gitSync.js";
+import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
-
-function toolError(message: string) {
-  return { content: [{ type: "text" as const, text: message }], isError: true };
-}
-
-function toolSuccess(text: string) {
-  return { content: [{ type: "text" as const, text }] };
-}
 
 export function registerFileOperations(server: McpServer, config: Config): void {
   // read_file
@@ -35,7 +28,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
         const content = await readFile(resolved, "utf-8");
         return toolSuccess(content);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("read_file failed", { path: filePath, error: msg });
         return toolError(`Failed to read file: ${msg}`);
       }
@@ -63,7 +56,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
         await commitAndPush(config, `MCP: write ${filePath}`);
         return toolSuccess(`File written: ${filePath}`);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("write_file failed", { path: filePath, error: msg });
         return toolError(`Failed to write file: ${msg}`);
       }
@@ -105,7 +98,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
         await commitAndPush(config, `MCP: edit ${filePath}`);
         return toolSuccess(`File edited: ${filePath}`);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("edit_file failed", { path: filePath, error: msg });
         return toolError(`Failed to edit file: ${msg}`);
       }
@@ -128,7 +121,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
         await commitAndPush(config, `MCP: delete ${filePath}`);
         return toolSuccess(`File deleted: ${filePath}`);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("delete_file failed", { path: filePath, error: msg });
         return toolError(`Failed to delete file: ${msg}`);
       }
@@ -154,7 +147,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
         await commitAndPush(config, `MCP: rename ${old_path} -> ${new_path}`);
         return toolSuccess(`File renamed: ${old_path} -> ${new_path}`);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("rename_file failed", { old_path, new_path, error: msg });
         return toolError(`Failed to rename file: ${msg}`);
       }

@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { oauthStore } from "./store.js";
+import { RateLimiter } from "../utils/rateLimiter.js";
 import { logger } from "../utils/logger.js";
 
 const ALLOWED_REDIRECT_HOSTS = [
@@ -12,38 +13,12 @@ const SUPPORTED_RESPONSE_TYPES = ["code"];
 const SUPPORTED_AUTH_METHODS = ["client_secret_post"];
 const MAX_CLIENTS = 500;
 
-const registrationAttempts = new Map<string, { count: number; resetAt: number }>();
-const MAX_REGISTRATION_ATTEMPTS = 10;
-const RATE_LIMIT_WINDOW_MS = 60_000;
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = registrationAttempts.get(ip);
-  if (!entry || now > entry.resetAt) {
-    registrationAttempts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= MAX_REGISTRATION_ATTEMPTS) {
-    return false;
-  }
-  entry.count++;
-  return true;
-}
-
-/** Remove expired rate-limit entries to prevent slow memory leak. */
-export function cleanupRegistrationRateLimits(): void {
-  const now = Date.now();
-  for (const [ip, entry] of registrationAttempts) {
-    if (now > entry.resetAt) {
-      registrationAttempts.delete(ip);
-    }
-  }
-}
+export const registrationRateLimiter = new RateLimiter(10, 60_000);
 
 export function handleRegistration() {
   return (req: Request, res: Response): void => {
     const ip = req.ip ?? "unknown";
-    if (!checkRateLimit(ip)) {
+    if (!registrationRateLimiter.check(ip)) {
       res.status(429).json({ error: "too_many_requests" });
       return;
     }

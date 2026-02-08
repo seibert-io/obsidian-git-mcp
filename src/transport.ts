@@ -4,10 +4,10 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { jwtAuth } from "./auth.js";
 import { handleMetadata } from "./oauth/metadata.js";
-import { handleRegistration, cleanupRegistrationRateLimits } from "./oauth/registration.js";
+import { handleRegistration, registrationRateLimiter } from "./oauth/registration.js";
 import { handleAuthorizeGet } from "./oauth/authorize.js";
 import { handleGitHubCallback } from "./oauth/githubCallback.js";
-import { handleToken, cleanupTokenRateLimits } from "./oauth/token.js";
+import { handleToken, tokenRateLimiter } from "./oauth/token.js";
 import { oauthStore } from "./oauth/store.js";
 import { oauthSessionStore } from "./oauth/sessionStore.js";
 import { logger } from "./utils/logger.js";
@@ -21,10 +21,14 @@ interface SessionEntry {
   lastActivity: number;
 }
 
+export interface HttpServerHandle {
+  close: () => Promise<void>;
+}
+
 export async function startHttpServer(
   mcpServer: McpServer,
   config: Config,
-): Promise<void> {
+): Promise<HttpServerHandle> {
   const app = express();
 
   // Trust the first reverse proxy (Caddy) for correct req.ip in rate limiting
@@ -49,7 +53,7 @@ export async function startHttpServer(
   const sessions = new Map<string, SessionEntry>();
 
   // Periodically clean up idle sessions + expired OAuth entries
-  setInterval(() => {
+  const cleanupInterval = setInterval(() => {
     const now = Date.now();
     for (const [sid, entry] of sessions) {
       if (now - entry.lastActivity > SESSION_TTL_MS) {
@@ -60,8 +64,8 @@ export async function startHttpServer(
     }
     oauthStore.cleanup();
     oauthSessionStore.cleanup();
-    cleanupRegistrationRateLimits();
-    cleanupTokenRateLimits();
+    registrationRateLimiter.cleanup();
+    tokenRateLimiter.cleanup();
   }, 60_000);
 
   // Handle POST requests to /mcp (main MCP endpoint)
@@ -133,7 +137,15 @@ export async function startHttpServer(
     res.status(200).json({ status: "session terminated" });
   });
 
-  app.listen(config.port, () => {
+  const server = app.listen(config.port, () => {
     logger.info(`MCP server listening on port ${config.port}`);
   });
+
+  return {
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        clearInterval(cleanupInterval);
+        server.close((err) => (err ? reject(err) : resolve()));
+      }),
+  };
 }

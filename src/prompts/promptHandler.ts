@@ -6,7 +6,7 @@ export function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     "obsidian-conventions",
     {
-      description: "Vault-Konventionen, Link-Syntax, Frontmatter, Tags",
+      description: "Vault conventions, link syntax, frontmatter, tags",
     },
     async () => {
       const content = await loadGuide("conventions");
@@ -24,12 +24,12 @@ export function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     "obsidian-create-note",
     {
-      description: "Template für eine neue Notiz",
+      description: "Template for a new note",
       argsSchema: {
-        topic: z.string().describe("Thema der Notiz"),
+        topic: z.string().describe("Topic of the note"),
         note_type: z.enum(["daily", "meeting", "project", "zettel", "literature"])
           .optional()
-          .describe("Art der Notiz (default: zettel)"),
+          .describe("Type of note (default: zettel)"),
       },
     },
     async ({ topic, note_type }) => {
@@ -48,7 +48,7 @@ export function registerPrompts(server: McpServer): void {
   server.registerPrompt(
     "obsidian-search-strategy",
     {
-      description: "Welches Such-Tool wann nutzen",
+      description: "Which search tool to use when",
     },
     async () => {
       const content = await loadGuide("search-strategy");

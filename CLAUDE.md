@@ -105,9 +105,10 @@ Review the entire application as if seeing it for the first time. Read ALL sourc
 
 **The lists above are starting points, not boundaries.** The reviewer must independently identify any additional attack surfaces, vulnerability classes, or architectural risks that are relevant — even if not listed here. The reviewer is expected to think like an attacker and systematically explore all plausible threat vectors.
 
-4. **Classify every finding** with severity, file, line reference, and description
-5. **List positive security properties** that were verified and are correctly implemented
-6. The agent must be told: "This is a RESEARCH task — do NOT modify any files."
+4. **Ignore external dependencies** — only review project source code (`src/`, config files, Docker/Caddy files). Do not review code inside `node_modules/` or third-party libraries.
+5. **Classify every finding** with severity, file, line reference, and description
+6. **List positive security properties** that were verified and are correctly implemented
+7. The agent must be told: "This is a RESEARCH task — do NOT modify any files."
 
 #### Severity classification
 - **CRITICAL/HIGH**: Fix immediately — auth bypass, RCE, secret leakage
@@ -117,9 +118,58 @@ Review the entire application as if seeing it for the first time. Read ALL sourc
 
 Fix any HIGH or MEDIUM findings before committing. Document any accepted LOW/INFO findings.
 
+### 4. Code Review (Clean Code)
+
+**Code reviews MUST be delegated to an independent subagent** (via the Task tool with `subagent_type: "general-purpose"`). The reviewing agent must be briefed as an independent code reviewer with deep expertise in Clean Code principles. The developer who wrote the code must NOT review their own changes — an independent agent provides the fresh perspective needed to catch readability, design, and maintainability issues.
+
+#### Subagent briefing template
+
+The code review agent must be instructed to:
+
+1. **Read ALL changed source files** (full files, not just diffs)
+2. **Read related files** that interact with the changes to understand context and conventions
+3. **Perform two layers of review:**
+
+**Layer 1 — Focused review of changed code (examples, not exhaustive):**
+- **Naming**: Are variable, function, class, and file names descriptive, consistent, and intention-revealing?
+- **Single Responsibility**: Does each function/class/module do exactly one thing?
+- **DRY (Don't Repeat Yourself)**: Is there duplicated logic that should be extracted?
+- **Function design**: Are functions short, focused, and at a single level of abstraction? Do they have minimal parameters?
+- **Readability**: Can the code be understood without excessive mental gymnastics? Would a developer new to the project understand the flow?
+- **Error handling**: Is error handling consistent, clear, and at appropriate levels?
+- **Magic values**: Are there unexplained literals that should be named constants?
+- **Dead code**: Is there commented-out code, unused imports, or unreachable branches?
+- **Complexity**: Are there deeply nested conditionals or overly clever constructs that should be simplified?
+- **Type safety**: Are TypeScript types precise and meaningful (not `any`, not overly loose)?
+
+**Layer 2 — Holistic codebase review (independent of current changes):**
+Review the entire codebase for structural and maintainability issues as if seeing it for the first time:
+- **Module structure**: Are responsibilities cleanly separated between files/directories?
+- **Consistency**: Are patterns (error handling, logging, validation) applied uniformly across the codebase?
+- **Coupling**: Are modules loosely coupled with clear interfaces, or are there hidden dependencies?
+- **Abstraction levels**: Are abstractions appropriate — neither premature nor missing where they should exist?
+- **Code organization**: Is related code co-located? Are imports clean and organized?
+- **API design**: Are function signatures, return types, and error contracts clear and consistent?
+
+**The lists above are starting points, not boundaries.** The reviewer must independently identify any additional code quality issues, anti-patterns, or maintainability risks — even if not listed here.
+
+4. **Ignore external dependencies** — only review project source code (`src/`, config files). Do not review code inside `node_modules/` or third-party libraries.
+5. **Classify every finding** with severity, file, line reference, and description
+6. **List positive code quality properties** that were verified and are well-implemented
+7. The agent must be told: "This is a RESEARCH task — do NOT modify any files."
+
+#### Severity classification
+- **HIGH**: Fix before committing — code that is misleading, significantly hard to maintain, or violates fundamental design principles
+- **MEDIUM**: Should fix — unclear naming, moderate duplication, inconsistent patterns, unnecessary complexity
+- **LOW**: Nice to have — minor style preferences, cosmetic improvements, small naming tweaks
+- **INFO**: Observation — acceptable trade-offs, areas to watch in future changes
+
+Fix any HIGH findings before committing. MEDIUM findings should be fixed unless there is a documented reason to defer. LOW/INFO findings are optional.
+
 ### Execution Order
 1. `npm run build` — fix type errors
 2. `npm test` — fix failing tests
-3. Security review (focused + holistic) — fix vulnerabilities
-4. Repeat steps 1-3 if fixes were needed
-5. Only then: commit and push
+3. Security review (independent agent, 3 layers) — fix vulnerabilities
+4. Code review (independent agent, clean code) — fix quality issues
+5. Repeat steps 1-4 if fixes were needed
+6. Only then: commit and push

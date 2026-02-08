@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
 
+const MAX_AUTH_CODES = 1000;
+const MAX_REFRESH_TOKENS = 2000;
+
 export interface RegisteredClient {
   clientId: string;
   clientSecret: string;
@@ -75,6 +78,11 @@ class OAuthStore {
     redirectUri: string,
     codeChallenge: string,
   ): string {
+    // Evict oldest entry if at capacity
+    if (this.authCodes.size >= MAX_AUTH_CODES) {
+      const oldestKey = this.authCodes.keys().next().value;
+      if (oldestKey) this.authCodes.delete(oldestKey);
+    }
     const code = crypto.randomBytes(32).toString("hex");
     this.authCodes.set(code, {
       code,
@@ -98,6 +106,11 @@ class OAuthStore {
   // --- Refresh Tokens ---
 
   createRefreshToken(clientId: string, expirySeconds: number): string {
+    // Evict oldest entry if at capacity
+    if (this.refreshTokens.size >= MAX_REFRESH_TOKENS) {
+      const oldestKey = this.refreshTokens.keys().next().value;
+      if (oldestKey) this.refreshTokens.delete(oldestKey);
+    }
     const token = crypto.randomBytes(32).toString("hex");
     this.refreshTokens.set(token, {
       token,

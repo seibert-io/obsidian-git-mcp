@@ -3,46 +3,24 @@ import type { Request, Response } from "express";
 import type { Config } from "../config.js";
 import { oauthStore } from "./store.js";
 import { createAccessToken } from "./jwt.js";
+import { RateLimiter } from "../utils/rateLimiter.js";
 import { logger } from "../utils/logger.js";
 
-const tokenAttempts = new Map<string, { count: number; resetAt: number }>();
-const MAX_TOKEN_ATTEMPTS = 20;
-const RATE_LIMIT_WINDOW_MS = 60_000;
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = tokenAttempts.get(ip);
-  if (!entry || now > entry.resetAt) {
-    tokenAttempts.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-    return true;
-  }
-  if (entry.count >= MAX_TOKEN_ATTEMPTS) {
-    return false;
-  }
-  entry.count++;
-  return true;
-}
-
-/** Remove expired rate-limit entries to prevent slow memory leak. */
-export function cleanupTokenRateLimits(): void {
-  const now = Date.now();
-  for (const [ip, entry] of tokenAttempts) {
-    if (now > entry.resetAt) {
-      tokenAttempts.delete(ip);
-    }
-  }
-}
+export const tokenRateLimiter = new RateLimiter(20, 60_000);
 
 function verifyPkce(codeVerifier: string, codeChallenge: string): boolean {
   const hash = crypto.createHash("sha256").update(codeVerifier).digest();
   const computed = hash.toString("base64url");
-  return computed === codeChallenge;
+  // Timing-safe comparison to prevent side-channel attacks
+  const a = Buffer.from(computed);
+  const b = Buffer.from(codeChallenge);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 export function handleToken(config: Config) {
   return (req: Request, res: Response): void => {
     const ip = req.ip ?? "unknown";
-    if (!checkRateLimit(ip)) {
+    if (!tokenRateLimiter.check(ip)) {
       res.status(429).json({ error: "too_many_requests" });
       return;
     }

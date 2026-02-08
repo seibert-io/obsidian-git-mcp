@@ -5,18 +5,12 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { resolveVaultPath } from "../utils/pathValidation.js";
+import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB — skip files larger than this in search
 const MAX_REGEX_LENGTH = 500;
-
-function toolError(message: string) {
-  return { content: [{ type: "text" as const, text: message }], isError: true };
-}
-
-function toolSuccess(text: string) {
-  return { content: [{ type: "text" as const, text }] };
-}
+const MAX_GREP_RESULTS = 500;
 
 /**
  * Validate a glob pattern to prevent path traversal.
@@ -70,7 +64,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         );
         return toolSuccess(results.join("\n"));
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("search_files failed", { pattern, error: msg });
         return toolError(`Search failed: ${msg}`);
       }
@@ -120,10 +114,9 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         }
 
         const results: string[] = [];
-        const MAX_RESULTS = 500;
 
         for (const file of files) {
-          if (results.length >= MAX_RESULTS) break;
+          if (results.length >= MAX_GREP_RESULTS) break;
 
           const filePath = path.join(resolved, file);
 
@@ -140,7 +133,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
             const lines = content.split("\n");
 
             for (let i = 0; i < lines.length; i++) {
-              if (results.length >= MAX_RESULTS) break;
+              if (results.length >= MAX_GREP_RESULTS) break;
               if (regex.test(lines[i])) {
                 const relPath = path.relative(config.vaultPath, filePath);
                 results.push(`${relPath}:${i + 1}: ${lines[i]}`);
@@ -156,12 +149,12 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         }
 
         let output = results.join("\n");
-        if (results.length >= MAX_RESULTS) {
-          output += `\n\n(Results truncated at ${MAX_RESULTS} matches)`;
+        if (results.length >= MAX_GREP_RESULTS) {
+          output += `\n\n(Results truncated at ${MAX_GREP_RESULTS} matches)`;
         }
         return toolSuccess(output);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("grep failed", { query, error: msg });
         return toolError(`Grep failed: ${msg}`);
       }
@@ -225,7 +218,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         }
         return toolSuccess(results.join("\n"));
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("find_files failed", { error: msg });
         return toolError(`Find failed: ${msg}`);
       }

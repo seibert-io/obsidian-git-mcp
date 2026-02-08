@@ -6,15 +6,8 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { resolveVaultPath } from "../utils/pathValidation.js";
 import { getLastSyncTimestamp } from "../git/gitSync.js";
+import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
-
-function toolError(message: string) {
-  return { content: [{ type: "text" as const, text: message }], isError: true };
-}
-
-function toolSuccess(text: string) {
-  return { content: [{ type: "text" as const, text }] };
-}
 
 async function countFiles(
   dirPath: string,
@@ -74,7 +67,7 @@ export function registerVaultOperations(server: McpServer, config: Config): void
 
         return toolSuccess(info);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("get_vault_info failed", { error: msg });
         return toolError(`Failed to get vault info: ${msg}`);
       }
@@ -136,7 +129,7 @@ export function registerVaultOperations(server: McpServer, config: Config): void
           `Backlinks to "${basename}" (${backlinks.length} files):\n${backlinks.join("\n")}`,
         );
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("get_backlinks failed", { path: notePath, error: msg });
         return toolError(`Failed to get backlinks: ${msg}`);
       }
@@ -191,7 +184,7 @@ export function registerVaultOperations(server: McpServer, config: Config): void
         const output = sorted.map(([tag, count]) => `${tag} (${count})`).join("\n");
         return toolSuccess(`Tags found (${tagCounts.size} unique):\n${output}`);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = getErrorMessage(error);
         logger.error("get_tags failed", { path: filePath, error: msg });
         return toolError(`Failed to get tags: ${msg}`);
       }
