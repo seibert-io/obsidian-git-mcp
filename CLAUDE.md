@@ -71,6 +71,8 @@ All tests must pass (currently 67 tests across 4 suites). If tests fail, fix the
 
 **Security reviews MUST be delegated to an independent subagent** (via the Task tool with `subagent_type: "general-purpose"`). The reviewing agent must be briefed as an independent security auditor who relentlessly identifies all issues — in application code, OAuth flows, infrastructure configuration, and Docker/proxy setup. The developer who wrote the code must NOT review their own changes; an independent agent provides the objectivity needed to catch blind spots.
 
+The agent must be explicitly instructed to **think and operate like an attacker**: assume the system will be targeted, actively try to find ways to break authentication, escape sandboxes, leak secrets, exhaust resources, or abuse any functionality. The reviewer should not just verify that security controls exist — they should try to circumvent them.
+
 #### Subagent briefing template
 
 The security review agent must be instructed to:
