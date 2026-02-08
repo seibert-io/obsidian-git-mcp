@@ -1,9 +1,10 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { Config } from "../config.js";
 import { loadGuide, loadNoteTemplate, loadAllGuides } from "../guides/guideLoader.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 
-export function registerGuideOperations(server: McpServer): void {
+export function registerGuideOperations(server: McpServer, config: Config): void {
   server.registerTool(
     "get_obsidian_guide",
     {
@@ -24,13 +25,13 @@ export function registerGuideOperations(server: McpServer): void {
         switch (topic) {
           case "conventions":
           case "search-strategy":
-            content = await loadGuide(topic);
+            content = await loadGuide(config.promptsDir, topic);
             break;
           case "create-note":
-            content = await loadNoteTemplate(note_type ?? "zettel", "");
+            content = await loadNoteTemplate(config.promptsDir, note_type ?? "zettel", "");
             break;
           case "all":
-            content = await loadAllGuides();
+            content = await loadAllGuides(config.promptsDir);
             break;
         }
 

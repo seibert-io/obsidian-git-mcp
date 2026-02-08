@@ -3,7 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
-import { resolveVaultPath } from "../utils/pathValidation.js";
+import { resolveVaultPathSafe } from "../utils/pathValidation.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
 
@@ -60,7 +60,7 @@ export function registerDirectoryOps(server: McpServer, config: Config): void {
     },
     async ({ path: dirPath, recursive, max_depth }) => {
       try {
-        const resolved = resolveVaultPath(config.vaultPath, dirPath);
+        const resolved = await resolveVaultPathSafe(config.vaultPath, dirPath);
         const s = await stat(resolved);
         if (!s.isDirectory()) {
           return toolError(`Not a directory: ${dirPath}`);
@@ -104,7 +104,7 @@ export function registerDirectoryOps(server: McpServer, config: Config): void {
     },
     async ({ path: dirPath }) => {
       try {
-        const resolved = resolveVaultPath(config.vaultPath, dirPath);
+        const resolved = await resolveVaultPathSafe(config.vaultPath, dirPath);
         await mkdir(resolved, { recursive: true });
         return toolSuccess(`Directory created: ${dirPath}`);
       } catch (error) {

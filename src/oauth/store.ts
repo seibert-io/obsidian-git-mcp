@@ -27,7 +27,7 @@ export interface RefreshTokenEntry {
   expiresAt: number;
 }
 
-class OAuthStore {
+export class OAuthStore {
   private clients = new Map<string, RegisteredClient>();
   private authCodes = new Map<string, AuthorizationCode>();
   private refreshTokens = new Map<string, RefreshTokenEntry>();
@@ -141,6 +141,3 @@ class OAuthStore {
     }
   }
 }
-
-// Singleton
-export const oauthStore = new OAuthStore();

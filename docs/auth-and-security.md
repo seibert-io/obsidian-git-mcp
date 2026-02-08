@@ -28,7 +28,7 @@ All file paths are validated by `resolveVaultPath()` (sync) and `resolveVaultPat
 2. Resolves the path relative to `VAULT_PATH` using `path.resolve()`
 3. Verifies the resolved path starts with the vault directory
 4. Blocks any path component that is `.git` or starts with `.git` at root level
-5. (Async) Checks that the file is not a symlink pointing outside the vault
+5. (Async) Uses `realpath()` to resolve all symlinks (including intermediate directories) and verifies the real path is inside the vault. For non-existent files, walks up the directory tree to find the closest existing ancestor and verifies that.
 
 ### Protected Paths
 
@@ -44,7 +44,7 @@ Path validation errors throw `PathValidationError`, which tool handlers catch an
 
 ## Reverse Proxy (`trust proxy`)
 
-Express is configured with `app.set("trust proxy", 1)` to trust the first reverse proxy (Caddy). This ensures `req.ip` returns the real client IP (from `X-Forwarded-For`) instead of Caddy's Docker-internal IP, which is essential for per-client rate limiting.
+When `TRUST_PROXY=true` (default), Express is configured with `app.set("trust proxy", 1)` to trust the first reverse proxy (Caddy). This ensures `req.ip` returns the real client IP (from `X-Forwarded-For`) instead of Caddy's Docker-internal IP, which is essential for per-client rate limiting. Set `TRUST_PROXY=false` when exposing the server directly without a reverse proxy.
 
 ## Security Headers (Caddy)
 
@@ -64,16 +64,18 @@ Caddy adds the following security headers to all responses:
 - Session TTL: 30 minutes of inactivity
 - Rate-limit maps are periodically pruned (60s interval) to prevent memory leaks
 
-## File Size Limits
+## File Size & Result Limits
 
-- Maximum file size for read/write operations: 10 MB
+- Maximum file size for read/write operations: 10 MB (`MAX_FILE_SIZE` in `src/utils/constants.ts`)
 - Maximum regex length for grep: 500 characters
+- Maximum grep results: 500 matches
+- Maximum find_files results: 500 files
 
 ## Docker & Network Security
 
 - Runtime uses a non-root user (`mcpuser`)
 - Multi-stage build keeps the image minimal
-- Only `git` and `curl` are installed as system dependencies
+- Only `git`, `curl`, and `ca-certificates` are installed as system dependencies
 - In production: MCP container is only accessible via Docker-internal network (`expose: 3000`, no `ports`)
 - Caddy is the only container with public port exposure (80/443)
 - `Caddyfile` is mounted read-only (`:ro`)

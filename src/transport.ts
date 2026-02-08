@@ -4,12 +4,13 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { jwtAuth } from "./auth.js";
 import { handleMetadata } from "./oauth/metadata.js";
-import { handleRegistration, registrationRateLimiter } from "./oauth/registration.js";
+import { handleRegistration } from "./oauth/registration.js";
 import { handleAuthorizeGet } from "./oauth/authorize.js";
 import { handleGitHubCallback } from "./oauth/githubCallback.js";
-import { handleToken, tokenRateLimiter } from "./oauth/token.js";
-import { oauthStore } from "./oauth/store.js";
-import { oauthSessionStore } from "./oauth/sessionStore.js";
+import { handleToken } from "./oauth/token.js";
+import { OAuthStore } from "./oauth/store.js";
+import { OAuthSessionStore } from "./oauth/sessionStore.js";
+import { RateLimiter } from "./utils/rateLimiter.js";
 import { logger } from "./utils/logger.js";
 import type { Config } from "./config.js";
 
@@ -31,15 +32,24 @@ export async function startHttpServer(
 ): Promise<HttpServerHandle> {
   const app = express();
 
-  // Trust the first reverse proxy (Caddy) for correct req.ip in rate limiting
-  app.set("trust proxy", 1);
+  // Trust the first reverse proxy (Caddy) for correct req.ip in rate limiting.
+  // Disable via TRUST_PROXY=false when exposing port directly without a proxy.
+  if (config.trustProxy) {
+    app.set("trust proxy", 1);
+  }
+
+  // Create OAuth stores and rate limiters (injected into handlers)
+  const oauthStore = new OAuthStore();
+  const oauthSessionStore = new OAuthSessionStore();
+  const registrationRateLimiter = new RateLimiter(10, 60_000);
+  const tokenRateLimiter = new RateLimiter(20, 60_000);
 
   // --- OAuth 2.1 endpoints (no auth required) ---
   app.get("/.well-known/oauth-authorization-server", handleMetadata(config));
-  app.post("/oauth/register", express.json(), handleRegistration());
-  app.get("/oauth/authorize", handleAuthorizeGet(config));
-  app.get("/oauth/github/callback", handleGitHubCallback(config));
-  app.post("/oauth/token", express.urlencoded({ extended: false }), handleToken(config));
+  app.post("/oauth/register", express.json(), handleRegistration(oauthStore, registrationRateLimiter));
+  app.get("/oauth/authorize", handleAuthorizeGet(config, oauthStore, oauthSessionStore));
+  app.get("/oauth/github/callback", handleGitHubCallback(config, oauthSessionStore, oauthStore));
+  app.post("/oauth/token", express.urlencoded({ extended: false }), handleToken(config, oauthStore, tokenRateLimiter));
 
   // Auth middleware for all /mcp routes (OAuth 2.1 JWT only)
   app.use("/mcp", jwtAuth(config.jwtSecret));

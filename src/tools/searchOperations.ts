@@ -7,10 +7,10 @@ import type { Config } from "../config.js";
 import { resolveVaultPath } from "../utils/pathValidation.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB — skip files larger than this in search
+import { MAX_FILE_SIZE } from "../utils/constants.js";
 const MAX_REGEX_LENGTH = 500;
 const MAX_GREP_RESULTS = 500;
+const MAX_FIND_RESULTS = 500;
 
 /**
  * Validate a glob pattern to prevent path traversal.
@@ -196,6 +196,8 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         const results: string[] = [];
 
         for (const entry of files) {
+          if (results.length >= MAX_FIND_RESULTS) break;
+
           const filePath = path.join(resolved, entry.path);
           const fileStat = await stat(filePath);
 
@@ -216,7 +218,11 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         if (results.length === 0) {
           return toolSuccess("No files found matching criteria");
         }
-        return toolSuccess(results.join("\n"));
+        let output = results.join("\n");
+        if (results.length >= MAX_FIND_RESULTS) {
+          output += `\n\n(Results truncated at ${MAX_FIND_RESULTS} files)`;
+        }
+        return toolSuccess(output);
       } catch (error) {
         const msg = getErrorMessage(error);
         logger.error("find_files failed", { error: msg });

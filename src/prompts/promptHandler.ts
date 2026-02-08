@@ -1,15 +1,16 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { loadGuide, loadNoteTemplate, loadAllGuides } from "../guides/guideLoader.js";
+import type { Config } from "../config.js";
+import { loadGuide, loadNoteTemplate } from "../guides/guideLoader.js";
 
-export function registerPrompts(server: McpServer): void {
+export function registerPrompts(server: McpServer, config: Config): void {
   server.registerPrompt(
     "obsidian-conventions",
     {
       description: "Vault conventions, link syntax, frontmatter, tags",
     },
     async () => {
-      const content = await loadGuide("conventions");
+      const content = await loadGuide(config.promptsDir, "conventions");
       return {
         messages: [
           {
@@ -33,7 +34,7 @@ export function registerPrompts(server: McpServer): void {
       },
     },
     async ({ topic, note_type }) => {
-      const content = await loadNoteTemplate(note_type ?? "zettel", topic);
+      const content = await loadNoteTemplate(config.promptsDir, note_type ?? "zettel", topic);
       return {
         messages: [
           {
@@ -51,7 +52,7 @@ export function registerPrompts(server: McpServer): void {
       description: "Which search tool to use when",
     },
     async () => {
-      const content = await loadGuide("search-strategy");
+      const content = await loadGuide(config.promptsDir, "search-strategy");
       return {
         messages: [
           {

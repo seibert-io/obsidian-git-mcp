@@ -1,5 +1,5 @@
 import path from "node:path";
-import { realpath, lstat } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 
 /**
  * Resolves and validates that a given path stays within the vault directory.
@@ -41,22 +41,40 @@ export function resolveVaultPath(vaultPath: string, filePath: string): string {
  */
 export async function resolveVaultPathSafe(vaultPath: string, filePath: string): Promise<string> {
   const resolved = resolveVaultPath(vaultPath, filePath);
+  const normalizedVault = path.resolve(vaultPath);
 
-  // Check if the target is a symlink escaping the vault
+  // Resolve all symlinks (including intermediate directories) and verify
+  // the real path is still within the vault.
   try {
-    const stats = await lstat(resolved);
-    if (stats.isSymbolicLink()) {
-      const real = await realpath(resolved);
-      const normalizedVault = path.resolve(vaultPath);
-      if (!real.startsWith(normalizedVault + path.sep) && real !== normalizedVault) {
-        throw new PathValidationError(
-          `Symlink escape detected: "${filePath}" points outside the vault`,
-        );
-      }
+    const real = await realpath(resolved);
+    if (!real.startsWith(normalizedVault + path.sep) && real !== normalizedVault) {
+      throw new PathValidationError(
+        `Symlink escape detected: "${filePath}" resolves outside the vault`,
+      );
     }
   } catch (error) {
-    // If the file doesn't exist yet (e.g., write_file creating a new file), that's OK
     if (error instanceof PathValidationError) throw error;
+    // File doesn't exist yet (e.g., write_file creating a new file) —
+    // walk up the directory tree to find the closest existing ancestor
+    // and verify it resolves inside the vault.
+    let ancestor = path.dirname(resolved);
+    while (ancestor !== normalizedVault) {
+      try {
+        const realAncestor = await realpath(ancestor);
+        if (!realAncestor.startsWith(normalizedVault + path.sep) && realAncestor !== normalizedVault) {
+          throw new PathValidationError(
+            `Symlink escape detected: ancestor of "${filePath}" resolves outside the vault`,
+          );
+        }
+        break; // Found an existing ancestor inside the vault — safe
+      } catch (ancestorError) {
+        if (ancestorError instanceof PathValidationError) throw ancestorError;
+        // This ancestor doesn't exist either — keep walking up
+        const parent = path.dirname(ancestor);
+        if (parent === ancestor) break; // Reached filesystem root — stop
+        ancestor = parent;
+      }
+    }
   }
 
   return resolved;

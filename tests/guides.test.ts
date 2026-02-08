@@ -11,8 +11,10 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { registerGuideOperations } from "../src/tools/guideOperations.js";
 import { registerPrompts } from "../src/prompts/promptHandler.js";
+import type { Config } from "../src/config.js";
 
 const TEST_PROMPTS = "/tmp/test-prompts-guides";
+const testConfig = { promptsDir: TEST_PROMPTS } as Config;
 
 describe("Guide Tool and MCP Prompts", () => {
   let httpServer: Server;
@@ -61,15 +63,12 @@ describe("Guide Tool and MCP Prompts", () => {
       ].join("\n"),
     );
 
-    // Set PROMPTS_DIR to test directory
-    process.env.PROMPTS_DIR = TEST_PROMPTS;
-
     const mcpServer = new McpServer({
       name: "test-guide-server",
       version: "1.0.0",
     });
-    registerGuideOperations(mcpServer);
-    registerPrompts(mcpServer);
+    registerGuideOperations(mcpServer, testConfig);
+    registerPrompts(mcpServer, testConfig);
 
     const app = express();
     const transports = new Map<string, StreamableHTTPServerTransport>();
@@ -128,7 +127,6 @@ describe("Guide Tool and MCP Prompts", () => {
   afterAll(async () => {
     await client?.close();
     httpServer?.close();
-    delete process.env.PROMPTS_DIR;
     await rm(TEST_PROMPTS, { recursive: true, force: true });
   });
 

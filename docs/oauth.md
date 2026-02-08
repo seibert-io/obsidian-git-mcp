@@ -98,7 +98,7 @@ The session key is passed to GitHub as the `state` parameter, allowing the serve
 - **Auth codes** are single-use with 5-minute expiry
 - **Refresh token rotation** — each use invalidates the old token and issues a new one
 - **Rate limiting** — 10 registrations/min per IP, 20 token requests/min per IP
-- **Redirect URI validation** — must be HTTPS and from allowed hosts (claude.ai, claude.com)
+- **Redirect URI validation** — must be HTTPS from allowed hosts (claude.ai, claude.com), or HTTP/HTTPS loopback (localhost, 127.0.0.1, ::1) per RFC 8252 for native CLI clients
 - **JWT access tokens** signed with HS256 with audience/issuer validation
 - **GitHub token discarded** immediately after user info fetch (not stored)
 - **Session store** entries expire after 10 minutes and are consumed on first use

@@ -10,7 +10,9 @@ import { handleGitHubCallback } from "../src/oauth/githubCallback.js";
 import { handleToken } from "../src/oauth/token.js";
 import { jwtAuth } from "../src/auth.js";
 import { createAccessToken } from "../src/oauth/jwt.js";
-import { oauthSessionStore } from "../src/oauth/sessionStore.js";
+import { OAuthStore } from "../src/oauth/store.js";
+import { OAuthSessionStore } from "../src/oauth/sessionStore.js";
+import { RateLimiter } from "../src/utils/rateLimiter.js";
 import { isAllowedUser } from "../src/oauth/allowlist.js";
 import type { Config } from "../src/config.js";
 
@@ -56,6 +58,8 @@ const testConfig: Config = {
   githubClientId: "test-github-client-id",
   githubClientSecret: "test-github-client-secret",
   allowedGithubUsers: ["alloweduser", "anotheruser"],
+  trustProxy: false,
+  promptsDir: "prompts",
 };
 
 // Helper: start authorize flow and extract session key from GitHub redirect
@@ -95,14 +99,20 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
   // Shared client — registered once to avoid hitting the per-IP rate limit
   let sharedClient: { client_id: string; client_secret: string };
 
+  // Fresh stores and rate limiters per test suite
+  const oauthStore = new OAuthStore();
+  const oauthSessionStore = new OAuthSessionStore();
+  const registrationRateLimiter = new RateLimiter(10, 60_000);
+  const tokenRateLimiter = new RateLimiter(20, 60_000);
+
   beforeAll(async () => {
     const app = express();
 
     app.get("/.well-known/oauth-authorization-server", handleMetadata(testConfig));
-    app.post("/oauth/register", express.json(), handleRegistration());
-    app.get("/oauth/authorize", handleAuthorizeGet(testConfig));
-    app.get("/oauth/github/callback", handleGitHubCallback(testConfig));
-    app.post("/oauth/token", express.urlencoded({ extended: false }), handleToken(testConfig));
+    app.post("/oauth/register", express.json(), handleRegistration(oauthStore, registrationRateLimiter));
+    app.get("/oauth/authorize", handleAuthorizeGet(testConfig, oauthStore, oauthSessionStore));
+    app.get("/oauth/github/callback", handleGitHubCallback(testConfig, oauthSessionStore, oauthStore));
+    app.post("/oauth/token", express.urlencoded({ extended: false }), handleToken(testConfig, oauthStore, tokenRateLimiter));
 
     app.use("/mcp", jwtAuth(testConfig.jwtSecret));
     app.post("/mcp", express.json(), (_req, res) => {
@@ -529,8 +539,10 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
 // ----- Session Store Unit Tests -----
 
 describe("OAuthSessionStore", () => {
+  const sessionStore = new OAuthSessionStore();
+
   it("creates and consumes sessions", () => {
-    const key = oauthSessionStore.create({
+    const key = sessionStore.create({
       clientId: "c1",
       redirectUri: "https://example.com/cb",
       state: "s1",
@@ -539,7 +551,7 @@ describe("OAuthSessionStore", () => {
     });
     expect(key).toHaveLength(64);
 
-    const session = oauthSessionStore.consume(key);
+    const session = sessionStore.consume(key!);
     expect(session).not.toBeNull();
     expect(session!.clientId).toBe("c1");
     expect(session!.redirectUri).toBe("https://example.com/cb");
@@ -548,25 +560,25 @@ describe("OAuthSessionStore", () => {
   });
 
   it("returns null on second consume (one-time use)", () => {
-    const key = oauthSessionStore.create({
+    const key = sessionStore.create({
       clientId: "c2",
       redirectUri: "https://example.com/cb",
       state: "s2",
       codeChallenge: "ch2",
       codeChallengeMethod: "S256",
     });
-    expect(oauthSessionStore.consume(key)).not.toBeNull();
-    expect(oauthSessionStore.consume(key)).toBeNull();
+    expect(sessionStore.consume(key!)).not.toBeNull();
+    expect(sessionStore.consume(key!)).toBeNull();
   });
 
   it("returns null for unknown key", () => {
-    expect(oauthSessionStore.consume("nonexistent-key")).toBeNull();
+    expect(sessionStore.consume("nonexistent-key")).toBeNull();
   });
 
   it("each session gets a unique key", () => {
     const data = { clientId: "c3", redirectUri: "u", state: "s", codeChallenge: "c", codeChallengeMethod: "S256" };
-    const key1 = oauthSessionStore.create(data);
-    const key2 = oauthSessionStore.create(data);
+    const key1 = sessionStore.create(data);
+    const key2 = sessionStore.create(data);
     expect(key1).not.toBe(key2);
   });
 });

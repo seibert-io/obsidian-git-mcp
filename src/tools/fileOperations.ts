@@ -7,8 +7,7 @@ import { resolveVaultPathSafe } from "../utils/pathValidation.js";
 import { commitAndPush } from "../git/gitSync.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+import { MAX_FILE_SIZE } from "../utils/constants.js";
 
 export function registerFileOperations(server: McpServer, config: Config): void {
   // read_file
@@ -93,7 +92,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
           );
         }
 
-        const newContent = content.replace(old_text, new_text);
+        const newContent = content.replace(old_text, () => new_text);
         await writeFile(resolved, newContent, "utf-8");
         await commitAndPush(config, `MCP: edit ${filePath}`);
         return toolSuccess(`File edited: ${filePath}`);

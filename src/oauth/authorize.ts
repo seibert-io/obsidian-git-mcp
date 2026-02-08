@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import type { Config } from "../config.js";
-import { oauthStore } from "./store.js";
-import { oauthSessionStore } from "./sessionStore.js";
+import type { OAuthStore } from "./store.js";
+import type { OAuthSessionStore } from "./sessionStore.js";
 import { logger } from "../utils/logger.js";
 
 /**
@@ -10,9 +10,18 @@ import { logger } from "../utils/logger.js";
  * Instead of showing a login page, saves the Claude session parameters
  * and redirects the user to GitHub for authentication.
  */
-export function handleAuthorizeGet(config: Config) {
+export function handleAuthorizeGet(config: Config, store: OAuthStore, sessionStore: OAuthSessionStore) {
   return (req: Request, res: Response): void => {
-    const { client_id, redirect_uri, state, code_challenge, code_challenge_method, response_type } = req.query as Record<string, string>;
+    const q = (key: string): string | undefined => {
+      const v = req.query[key];
+      return typeof v === "string" ? v : undefined;
+    };
+    const client_id = q("client_id");
+    const redirect_uri = q("redirect_uri");
+    const state = q("state");
+    const code_challenge = q("code_challenge");
+    const code_challenge_method = q("code_challenge_method");
+    const response_type = q("response_type");
 
     // Validate required params
     if (response_type !== "code") {
@@ -24,7 +33,7 @@ export function handleAuthorizeGet(config: Config) {
       return;
     }
 
-    const client = oauthStore.getClient(client_id);
+    const client = store.getClient(client_id);
     if (!client) {
       res.status(400).json({ error: "invalid_request", error_description: "Unknown client_id." });
       return;
@@ -35,7 +44,7 @@ export function handleAuthorizeGet(config: Config) {
     }
 
     // Save session data and redirect to GitHub
-    const sessionKey = oauthSessionStore.create({
+    const sessionKey = sessionStore.create({
       clientId: client_id,
       redirectUri: redirect_uri,
       state,

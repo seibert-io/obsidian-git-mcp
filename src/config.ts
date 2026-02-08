@@ -1,3 +1,5 @@
+import path from "node:path";
+
 export interface Config {
   gitRepoUrl: string;
   gitBranch: string;
@@ -16,6 +18,8 @@ export interface Config {
   githubClientId: string;
   githubClientSecret: string;
   allowedGithubUsers: string[];
+  trustProxy: boolean;
+  promptsDir: string;
 }
 
 export function loadConfig(): Config {
@@ -105,6 +109,8 @@ export function loadConfig(): Config {
     throw new Error("REFRESH_TOKEN_EXPIRY_SECONDS must be a positive number");
   }
 
+  const trustProxy = (process.env.TRUST_PROXY ?? "true").toLowerCase() !== "false";
+
   return {
     gitRepoUrl,
     gitBranch,
@@ -121,5 +127,7 @@ export function loadConfig(): Config {
     githubClientId,
     githubClientSecret,
     allowedGithubUsers,
+    trustProxy,
+    promptsDir: process.env.PROMPTS_DIR ?? path.join(process.cwd(), "prompts"),
   };
 }

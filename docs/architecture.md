@@ -48,6 +48,7 @@ The Obsidian Vault MCP Server is a Dockerized Node.js application that exposes a
 - **Path sandboxing**: All file paths are resolved and validated against `VAULT_PATH` before any I/O
 - **Git-triggered writes**: Every write operation (write, edit, delete, rename) triggers `git add . && git commit && git push`
 - **Periodic pull**: A configurable interval pulls remote changes to keep the vault in sync
+- **Dependency injection**: OAuth stores (`OAuthStore`, `OAuthSessionStore`) and rate limiters are instantiated in `transport.ts` and injected into handlers — no module-level singletons
 
 ## Directory Structure
 
@@ -82,6 +83,8 @@ src/
 ├── git/
 │   └── gitSync.ts          # clone, pull, commit+push, periodic sync
 └── utils/
-    ├── pathValidation.ts   # Path traversal prevention
+    ├── pathValidation.ts   # Path traversal prevention (sync + async with symlink resolution)
+    ├── constants.ts        # Shared constants (MAX_FILE_SIZE)
+    ├── rateLimiter.ts      # Reusable per-key rate limiter with sliding window
     └── logger.ts           # Structured logging
 ```

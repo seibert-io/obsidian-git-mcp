@@ -1,8 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-const PROMPTS_DIR = process.env.PROMPTS_DIR ?? path.join(process.cwd(), "prompts");
-
 interface CacheEntry {
   content: string;
   mtime: number;
@@ -10,34 +8,35 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 
-async function readGuideFile(filename: string): Promise<string> {
-  const filePath = path.join(PROMPTS_DIR, filename);
+async function readGuideFile(promptsDir: string, filename: string): Promise<string> {
+  const filePath = path.join(promptsDir, filename);
   const fileStat = await stat(filePath);
   const mtime = fileStat.mtimeMs;
 
-  const cached = cache.get(filename);
+  const cacheKey = `${promptsDir}:${filename}`;
+  const cached = cache.get(cacheKey);
   if (cached && cached.mtime === mtime) {
     return cached.content;
   }
 
   const content = await readFile(filePath, "utf-8");
-  cache.set(filename, { content, mtime });
+  cache.set(cacheKey, { content, mtime });
   return content;
 }
 
-export async function loadGuide(topic: string): Promise<string> {
+export async function loadGuide(promptsDir: string, topic: string): Promise<string> {
   switch (topic) {
     case "conventions":
-      return readGuideFile("obsidian-conventions.md");
+      return readGuideFile(promptsDir, "obsidian-conventions.md");
     case "search-strategy":
-      return readGuideFile("obsidian-search-strategy.md");
+      return readGuideFile(promptsDir, "obsidian-search-strategy.md");
     default:
       throw new Error(`Unknown guide topic: ${topic}`);
   }
 }
 
-export async function loadNoteTemplate(noteType: string, topic: string): Promise<string> {
-  const raw = await readGuideFile("obsidian-create-note.md");
+export async function loadNoteTemplate(promptsDir: string, noteType: string, topic: string): Promise<string> {
+  const raw = await readGuideFile(promptsDir, "obsidian-create-note.md");
 
   // Parse the template for the given note type
   const marker = `## type: ${noteType}`;
@@ -63,10 +62,10 @@ export async function loadNoteTemplate(noteType: string, topic: string): Promise
   return result;
 }
 
-export async function loadAllGuides(): Promise<string> {
-  const conventions = await loadGuide("conventions");
-  const searchStrategy = await loadGuide("search-strategy");
-  const createNote = await readGuideFile("obsidian-create-note.md");
+export async function loadAllGuides(promptsDir: string): Promise<string> {
+  const conventions = await loadGuide(promptsDir, "conventions");
+  const searchStrategy = await loadGuide(promptsDir, "search-strategy");
+  const createNote = await readGuideFile(promptsDir, "obsidian-create-note.md");
 
   return [
     conventions,

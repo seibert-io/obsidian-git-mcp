@@ -12,7 +12,7 @@ export interface OAuthSession {
 const SESSION_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const MAX_SESSIONS = 1000;
 
-class OAuthSessionStore {
+export class OAuthSessionStore {
   private sessions = new Map<string, OAuthSession>();
 
   /**
@@ -58,6 +58,3 @@ class OAuthSessionStore {
     return this.sessions.size;
   }
 }
-
-// Singleton
-export const oauthSessionStore = new OAuthSessionStore();

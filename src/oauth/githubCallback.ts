@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import type { Config } from "../config.js";
-import { oauthSessionStore } from "./sessionStore.js";
-import { oauthStore } from "./store.js";
+import type { OAuthSessionStore } from "./sessionStore.js";
+import type { OAuthStore } from "./store.js";
 import { exchangeGitHubCode, fetchGitHubUser } from "./githubClient.js";
 import { isAllowedUser } from "./allowlist.js";
 import { logger } from "../utils/logger.js";
@@ -13,9 +13,15 @@ import { logger } from "../utils/logger.js";
  * Validates the session, checks the allowlist, and redirects to Claude
  * with an authorization code.
  */
-export function handleGitHubCallback(config: Config) {
+export function handleGitHubCallback(config: Config, sessionStore: OAuthSessionStore, store: OAuthStore) {
   return async (req: Request, res: Response): Promise<void> => {
-    const { code, state, error: ghError } = req.query as Record<string, string>;
+    const q = (key: string): string | undefined => {
+      const v = req.query[key];
+      return typeof v === "string" ? v : undefined;
+    };
+    const code = q("code");
+    const state = q("state");
+    const ghError = q("error");
 
     // GitHub may redirect with an error (e.g. user denied access)
     if (ghError) {
@@ -30,7 +36,7 @@ export function handleGitHubCallback(config: Config) {
     }
 
     // Look up the session (one-time use)
-    const session = oauthSessionStore.consume(state);
+    const session = sessionStore.consume(state);
     if (!session) {
       logger.warn("Invalid or expired GitHub OAuth session", { state: state.slice(0, 8) + "..." });
       res.status(400).json({ error: "invalid_request", error_description: "Invalid or expired session. Please try again." });
@@ -63,7 +69,7 @@ export function handleGitHubCallback(config: Config) {
       }
 
       // Generate authorization code for Claude (same as before)
-      const authCode = oauthStore.createAuthCode(
+      const authCode = store.createAuthCode(
         session.clientId,
         session.redirectUri,
         session.codeChallenge,

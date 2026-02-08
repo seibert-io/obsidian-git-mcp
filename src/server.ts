@@ -18,9 +18,9 @@ export function createMcpServer(config: Config): McpServer {
   registerDirectoryOps(server, config);
   registerSearchOperations(server, config);
   registerVaultOperations(server, config);
-  registerGuideOperations(server);
+  registerGuideOperations(server, config);
   registerHistoryOperations(server, config);
-  registerPrompts(server);
+  registerPrompts(server, config);
 
   return server;
 }
