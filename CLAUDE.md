@@ -65,7 +65,7 @@ The TypeScript build must complete without errors. Fix all type errors before pr
 ```bash
 npm test
 ```
-All tests must pass (currently 67 tests across 4 suites). If tests fail, fix the root cause — do not skip or disable tests.
+All tests must pass (currently 69 tests across 4 suites). If tests fail, fix the root cause — do not skip or disable tests.
 
 ### 3. Security Review
 
@@ -117,6 +117,17 @@ Review the entire application as if seeing it for the first time. Read ALL sourc
 - **INFO**: Note for awareness — in-memory state loss on restart, cosmetic issues
 
 Fix any HIGH or MEDIUM findings before committing. Document any accepted LOW/INFO findings.
+
+#### Test-driven fixing of security findings
+
+When a security reviewer reports a risk, check whether the vulnerability can be demonstrated with a test. If yes, follow this TDD workflow:
+
+1. **Write a test** that exercises the reported vulnerability (e.g., attempts the exploit)
+2. **Verify the test fails** — confirming the vulnerability exists
+3. **Fix the vulnerability** in the application code
+4. **Verify the test passes** — confirming the vulnerability is closed
+
+This ensures every security fix is backed by a regression test that prevents reintroduction. If a finding cannot be meaningfully tested (e.g., infrastructure-only or timing-based), fix it directly and document why no test was added.
 
 ### 4. Code Review (Clean Code)
 

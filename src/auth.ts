@@ -5,8 +5,11 @@ import { logger } from "./utils/logger.js";
 /**
  * Express middleware that validates OAuth 2.1 JWT access tokens.
  * Only JWT tokens issued via the /oauth/token flow are accepted.
+ * Returns WWW-Authenticate header on 401 per RFC 9728 / MCP spec.
  */
-export function jwtAuth(jwtSecret: string) {
+export function jwtAuth(jwtSecret: string, serverUrl: string) {
+  const wwwAuthenticate = `Bearer resource_metadata="${serverUrl}/.well-known/oauth-protected-resource"`;
+
   return (req: Request, res: Response, next: NextFunction): void => {
     const authHeader = req.headers.authorization;
 
@@ -15,6 +18,7 @@ export function jwtAuth(jwtSecret: string) {
         path: req.path,
         ip: req.ip,
       });
+      res.set("WWW-Authenticate", wwwAuthenticate);
       res.status(401).json({ error: "Missing Authorization header" });
       return;
     }
@@ -24,6 +28,7 @@ export function jwtAuth(jwtSecret: string) {
       logger.warn("Malformed Authorization header", {
         path: req.path,
       });
+      res.set("WWW-Authenticate", wwwAuthenticate);
       res.status(401).json({ error: "Invalid Authorization format. Expected: Bearer <token>" });
       return;
     }
@@ -37,6 +42,7 @@ export function jwtAuth(jwtSecret: string) {
     }
 
     logger.warn("Invalid bearer token", { path: req.path });
+    res.set("WWW-Authenticate", wwwAuthenticate);
     res.status(401).json({ error: "Invalid token" });
   };
 }

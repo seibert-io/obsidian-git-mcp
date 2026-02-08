@@ -18,16 +18,39 @@ The server has two OAuth roles simultaneously:
 
 | Endpoint | Method | Auth | Description |
 |---|---|---|---|
-| `/.well-known/oauth-authorization-server` | GET | none | RFC 8414 server metadata |
+| `/.well-known/oauth-protected-resource` | GET | none | RFC 9728 Protected Resource Metadata |
+| `/.well-known/oauth-authorization-server` | GET | none | RFC 8414 Authorization Server Metadata |
 | `/oauth/register` | POST | none | Dynamic Client Registration (RFC 7591) |
 | `/oauth/authorize` | GET | none | Saves session, redirects to GitHub |
 | `/oauth/github/callback` | GET | none | GitHub callback → allowlist check → redirect to Claude |
 | `/oauth/token` | POST | none | Token exchange (authorization_code, refresh_token) |
 
+## Discovery Flow (RFC 9728 + RFC 8414)
+
+MCP clients use a two-step discovery process:
+1. `GET /.well-known/oauth-protected-resource` — returns `authorization_servers` array pointing to this server
+2. `GET /.well-known/oauth-authorization-server` — returns full OAuth metadata (endpoints, supported flows)
+
+The `/mcp` endpoint returns `401` with `WWW-Authenticate: Bearer resource_metadata="<url>"` to trigger discovery.
+
 ## Flow
 
 ```
 Claude.ai                        Server                         GitHub
+  │                                │                              │
+  │  POST /mcp (no token)          │                              │
+  │  ─────────────────────────►    │                              │
+  │  ◄── 401 + WWW-Authenticate   │                              │
+  │                                │                              │
+  │  GET /.well-known/             │                              │
+  │    oauth-protected-resource    │                              │
+  │  ─────────────────────────►    │                              │
+  │  ◄── { authorization_servers } │                              │
+  │                                │                              │
+  │  GET /.well-known/             │                              │
+  │    oauth-authorization-server  │                              │
+  │  ─────────────────────────►    │                              │
+  │  ◄── { endpoints, ... }       │                              │
   │                                │                              │
   │  POST /oauth/register          │                              │
   │  ─────────────────────────►    │                              │
@@ -79,7 +102,8 @@ The session key is passed to GitHub as the `state` parameter, allowing the serve
 
 | File | Purpose |
 |---|---|
-| `src/oauth/metadata.ts` | Server metadata endpoint |
+| `src/oauth/protectedResource.ts` | RFC 9728 Protected Resource Metadata endpoint |
+| `src/oauth/metadata.ts` | Authorization Server metadata endpoint |
 | `src/oauth/registration.ts` | Dynamic Client Registration |
 | `src/oauth/authorize.ts` | Saves session, redirects to GitHub |
 | `src/oauth/githubCallback.ts` | GitHub callback handler |

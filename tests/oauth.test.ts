@@ -3,6 +3,7 @@ import express from "express";
 import crypto from "node:crypto";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { handleProtectedResource } from "../src/oauth/protectedResource.js";
 import { handleMetadata } from "../src/oauth/metadata.js";
 import { handleRegistration } from "../src/oauth/registration.js";
 import { handleAuthorizeGet } from "../src/oauth/authorize.js";
@@ -108,13 +109,14 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
   beforeAll(async () => {
     const app = express();
 
+    app.get("/.well-known/oauth-protected-resource", handleProtectedResource(testConfig));
     app.get("/.well-known/oauth-authorization-server", handleMetadata(testConfig));
     app.post("/oauth/register", express.json(), handleRegistration(oauthStore, registrationRateLimiter));
     app.get("/oauth/authorize", handleAuthorizeGet(testConfig, oauthStore, oauthSessionStore));
     app.get("/oauth/github/callback", handleGitHubCallback(testConfig, oauthSessionStore, oauthStore));
     app.post("/oauth/token", express.urlencoded({ extended: false }), handleToken(testConfig, oauthStore, tokenRateLimiter));
 
-    app.use("/mcp", jwtAuth(testConfig.jwtSecret));
+    app.use("/mcp", jwtAuth(testConfig.jwtSecret, testConfig.serverUrl));
     app.post("/mcp", express.json(), (_req, res) => {
       res.json({ ok: true });
     });
@@ -149,6 +151,14 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
   });
 
   // ----- Core OAuth Endpoints -----
+
+  it("returns Protected Resource Metadata (RFC 9728)", async () => {
+    const res = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.resource).toBe(testConfig.serverUrl);
+    expect(data.authorization_servers).toEqual([testConfig.serverUrl]);
+  });
 
   it("returns OAuth server metadata", async () => {
     const res = await fetch(`${baseUrl}/.well-known/oauth-authorization-server`);
@@ -516,13 +526,30 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
     expect(res.status).toBe(200);
   });
 
-  it("auth middleware rejects invalid token", async () => {
+  it("auth middleware rejects invalid token with WWW-Authenticate header", async () => {
     const res = await fetch(`${baseUrl}/mcp`, {
       method: "POST",
       headers: { "Authorization": "Bearer invalid-token", "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(401);
+    const wwwAuth = res.headers.get("www-authenticate");
+    expect(wwwAuth).toContain("Bearer");
+    expect(wwwAuth).toContain("resource_metadata=");
+    expect(wwwAuth).toContain("/.well-known/oauth-protected-resource");
+  });
+
+  it("auth middleware returns WWW-Authenticate on missing Authorization header", async () => {
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(401);
+    const wwwAuth = res.headers.get("www-authenticate");
+    expect(wwwAuth).toContain("Bearer");
+    expect(wwwAuth).toContain("resource_metadata=");
+    expect(wwwAuth).toContain("/.well-known/oauth-protected-resource");
   });
 
   it("rejects unsupported grant type", async () => {

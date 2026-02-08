@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { jwtAuth } from "./auth.js";
+import { handleProtectedResource } from "./oauth/protectedResource.js";
 import { handleMetadata } from "./oauth/metadata.js";
 import { handleRegistration } from "./oauth/registration.js";
 import { handleAuthorizeGet } from "./oauth/authorize.js";
@@ -38,21 +39,42 @@ export async function startHttpServer(
     app.set("trust proxy", 1);
   }
 
+  // CORS — allow any origin so all MCP clients (web, CLI, Inspector) can connect.
+  // Auth is enforced via OAuth 2.1 Bearer tokens, not cookies.
+  const CORS_HEADERS: Record<string, string> = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version",
+    "Access-Control-Expose-Headers": "Mcp-Session-Id",
+  };
+  app.use((_req, res, next) => {
+    for (const [key, value] of Object.entries(CORS_HEADERS)) {
+      res.setHeader(key, value);
+    }
+    next();
+  });
+  app.options("/{*path}", (_req, res) => {
+    res.status(204).end();
+  });
+
   // Create OAuth stores and rate limiters (injected into handlers)
   const oauthStore = new OAuthStore();
   const oauthSessionStore = new OAuthSessionStore();
   const registrationRateLimiter = new RateLimiter(10, 60_000);
   const tokenRateLimiter = new RateLimiter(20, 60_000);
 
-  // --- OAuth 2.1 endpoints (no auth required) ---
+  // --- Discovery endpoints (no auth required) ---
+  app.get("/.well-known/oauth-protected-resource", handleProtectedResource(config));
   app.get("/.well-known/oauth-authorization-server", handleMetadata(config));
+
+  // --- OAuth 2.1 endpoints (no auth required) ---
   app.post("/oauth/register", express.json(), handleRegistration(oauthStore, registrationRateLimiter));
   app.get("/oauth/authorize", handleAuthorizeGet(config, oauthStore, oauthSessionStore));
   app.get("/oauth/github/callback", handleGitHubCallback(config, oauthSessionStore, oauthStore));
   app.post("/oauth/token", express.urlencoded({ extended: false }), handleToken(config, oauthStore, tokenRateLimiter));
 
   // Auth middleware for all /mcp routes (OAuth 2.1 JWT only)
-  app.use("/mcp", jwtAuth(config.jwtSecret));
+  app.use("/mcp", jwtAuth(config.jwtSecret, config.serverUrl));
 
   // Health check endpoint (no auth required)
   app.get("/health", (_req, res) => {

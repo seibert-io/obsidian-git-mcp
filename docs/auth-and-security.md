@@ -4,9 +4,9 @@
 
 ### JWT Auth (`src/auth.ts`)
 
-All requests to `/mcp` must include an `Authorization: Bearer <token>` header with a valid JWT access token issued via the OAuth 2.1 flow (`/oauth/token`). Tokens are verified using the `JWT_SECRET` with audience and issuer claims checked.
+All requests to `/mcp` must include an `Authorization: Bearer <token>` header with a valid JWT access token issued via the OAuth 2.1 flow (`/oauth/token`). Tokens are verified using the `JWT_SECRET` with audience and issuer claims checked. Unauthenticated requests receive a `401` with `WWW-Authenticate: Bearer resource_metadata="<url>"` per RFC 9728 to trigger OAuth discovery.
 
-Unauthenticated endpoints: `/health`, `/.well-known/oauth-authorization-server`, `/oauth/*`.
+Unauthenticated endpoints: `/health`, `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`, `/oauth/*`.
 
 ### GitHub OAuth (`src/oauth/authorize.ts`, `src/oauth/githubCallback.ts`)
 
@@ -54,6 +54,10 @@ Caddy adds the following security headers to all responses:
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`
 - `Server` header is removed
+
+## CORS (`src/transport.ts`)
+
+All responses include `Access-Control-Allow-Origin: *` so that any MCP client (web, CLI, Inspector) can connect. This is safe because authentication relies on OAuth 2.1 Bearer tokens, not cookies. The CORS middleware also exposes the `Mcp-Session-Id` header and allows the `Mcp-Protocol-Version` request header required by the MCP transport protocol. A catch-all `OPTIONS` handler returns `204` for preflight requests.
 
 ## Rate Limiting
 
