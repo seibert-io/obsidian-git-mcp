@@ -77,6 +77,29 @@ Extract all tags from the vault or a specific file. Parses `#tag` inline syntax 
 - **Input**: `{ path?: string }`
 - **Returns**: Tag list sorted by frequency
 
+## History Operations (`src/tools/historyOperations.ts`)
+
+### `get_recent_changes`
+Show recent changes made to the vault with full diffs. Returns a list of recent commits showing what content was added, modified, or deleted in each file.
+- **Input**: `{ count?: number }` — number of recent changes to retrieve (1–20, default 10)
+- **Returns**: Numbered list of commits with date, message, and per-file diffs showing added (`+`) and removed (`-`) lines
+- **Limits**: Max 80 diff lines per file (truncated with notice)
+- **Example output**:
+  ```
+  1. 2026-02-08 12:00:00
+     MCP: write notes/daily.md
+     [added] notes/daily.md
+    +# Daily Note 2026-02-08
+    +- Meeting at 10am
+    +- Review PRs
+
+  2. 2026-02-08 11:30:00
+     MCP: edit notes/project.md
+     [modified] notes/project.md
+    -Status: planning
+    +Status: in progress
+  ```
+
 ## Guide Operations (`src/tools/guideOperations.ts`)
 
 ### `get_obsidian_guide`

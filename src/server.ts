@@ -5,6 +5,7 @@ import { registerDirectoryOps } from "./tools/directoryOps.js";
 import { registerSearchOperations } from "./tools/searchOperations.js";
 import { registerVaultOperations } from "./tools/vaultOperations.js";
 import { registerGuideOperations } from "./tools/guideOperations.js";
+import { registerHistoryOperations } from "./tools/historyOperations.js";
 import { registerPrompts } from "./prompts/promptHandler.js";
 
 export function createMcpServer(config: Config): McpServer {
@@ -18,6 +19,7 @@ export function createMcpServer(config: Config): McpServer {
   registerSearchOperations(server, config);
   registerVaultOperations(server, config);
   registerGuideOperations(server);
+  registerHistoryOperations(server, config);
   registerPrompts(server);
 
   return server;

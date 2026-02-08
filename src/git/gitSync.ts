@@ -5,6 +5,7 @@ import type { Config } from "../config.js";
 import { logger } from "../utils/logger.js";
 
 const GIT_TIMEOUT_MS = 30_000;
+const GIT_MAX_BUFFER = 2 * 1024 * 1024; // 2 MiB
 
 let lastSyncTimestamp: Date | null = null;
 let syncIntervalHandle: ReturnType<typeof setInterval> | null = null;
@@ -18,7 +19,8 @@ function sanitizeError(message: string): string {
   return message.replace(/https?:\/\/[^@]+@/g, "https://***@");
 }
 
-function git(
+/** Execute a git command with timeout and sanitized error messages. */
+export function git(
   args: string[],
   cwd: string,
 ): Promise<{ stdout: string; stderr: string }> {
@@ -26,7 +28,7 @@ function git(
     execFile(
       "git",
       args,
-      { cwd, timeout: GIT_TIMEOUT_MS },
+      { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER },
       (error, stdout, stderr) => {
         if (error) {
           reject(

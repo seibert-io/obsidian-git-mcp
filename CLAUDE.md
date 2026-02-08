@@ -21,7 +21,7 @@ Load the relevant doc file when working on a specific domain:
 | File | Contents | Load When |
 |---|---|---|
 | `docs/architecture.md` | System design, component diagram, request flow, directory structure | Understanding overall architecture or adding new components |
-| `docs/tools.md` | All 14 MCP tool definitions, MCP prompts, inputs/outputs | Adding, modifying, or debugging MCP tools or prompts |
+| `docs/tools.md` | All 15 MCP tool definitions, MCP prompts, inputs/outputs | Adding, modifying, or debugging MCP tools or prompts |
 | `docs/git-sync.md` | Git clone/pull/push logic, conflict handling, timeouts | Working on git sync, debugging push/pull issues |
 | `docs/auth-and-security.md` | OAuth 2.1 JWT auth, path traversal prevention, Docker security | Security changes, auth modifications, path validation |
 | `docs/oauth.md` | OAuth 2.1 flow, DCR, PKCE, JWT tokens, endpoints, env vars | OAuth changes, token flow debugging, client registration |
