@@ -79,7 +79,7 @@ The security review agent must be instructed to:
 2. **Read related files** that interact with the changes (e.g., if OAuth changed, also read transport.ts, config.ts, metadata.ts)
 3. **Perform two layers of review:**
 
-**Layer 1 — Focused review of changed files:**
+**Layer 1 — Focused review of changed files (examples, not exhaustive):**
 - Path traversal / directory escape (glob patterns, symlinks, `..` in user input)
 - Injection risks (command injection via git args, template injection in string replacement)
 - Authentication / authorization bypasses (missing auth checks, session fixation)
@@ -89,7 +89,7 @@ The security review agent must be instructed to:
 - Open redirects (user-controlled redirect URIs not validated against allowlist)
 - OWASP Top 10 relevance
 
-**Layer 2 — Holistic review of how changes interact with the full stack:**
+**Layer 2 — Holistic review of how changes interact with the full stack (examples, not exhaustive):**
 - **Infrastructure**: Does the change affect Caddy, Docker, port exposure, TLS termination?
 - **OAuth flow end-to-end**: Does the change break or weaken any step in Claude→Server→GitHub→Callback→Token?
 - **Proxy interaction**: Does `req.ip` / `trust proxy` / rate limiting still work correctly behind Caddy?
@@ -97,6 +97,8 @@ The security review agent must be instructed to:
 - **Secret handling**: Are env vars, JWT secrets, GitHub credentials properly isolated between containers?
 - **Volume/mount security**: Are file mounts read-only where possible? Can mounted paths escape the intended scope?
 - **Network exposure**: Is the MCP server only accessible via the internal Docker network (not directly from the internet)?
+
+**The lists above are starting points, not boundaries.** The reviewer must independently identify any additional attack surfaces, vulnerability classes, or architectural risks that are relevant to the specific changes — even if not listed here. The reviewer is expected to think like an attacker and systematically explore all plausible threat vectors.
 
 4. **Classify every finding** with severity, file, line reference, and description
 5. **List positive security properties** that were verified and are correctly implemented
