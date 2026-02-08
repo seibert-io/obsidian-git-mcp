@@ -6,9 +6,8 @@ All configuration is via environment variables, parsed in `src/config.ts`.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `MCP_API_TOKEN` | yes | — | Static bearer token for authentication (min 16 chars) |
 | `GIT_REPO_URL` | yes | — | Git remote URL (HTTPS or SSH) |
-| `OAUTH_PASSWORD` | yes | — | Password for the OAuth authorization login page |
+| `OAUTH_PASSWORD` | yes | — | Password for the OAuth authorization login page (min 12 chars) |
 | `JWT_SECRET` | yes | — | Secret for signing JWT access tokens (min 32 chars) |
 | `SERVER_URL` | yes | — | Public URL of the server (e.g., `https://mcp.example.com`) |
 | `GIT_BRANCH` | no | `main` | Branch to sync |
@@ -36,19 +35,16 @@ GIT_REPO_URL=git@github.com:user/vault.git
 ## Generating Secrets
 
 ```bash
-# MCP_API_TOKEN (min 16 chars)
-openssl rand -hex 32
-
 # JWT_SECRET (min 32 chars)
 openssl rand -hex 32
 
-# OAUTH_PASSWORD — choose a strong password
+# OAUTH_PASSWORD — choose a strong password (min 12 chars)
 ```
 
 ## Validation
 
-- `MCP_API_TOKEN`, `GIT_REPO_URL`, `OAUTH_PASSWORD`, `JWT_SECRET`, and `SERVER_URL` are required; startup fails if missing
-- `MCP_API_TOKEN` must be at least 16 characters
+- `GIT_REPO_URL`, `OAUTH_PASSWORD`, `JWT_SECRET`, and `SERVER_URL` are required; startup fails if missing
+- `OAUTH_PASSWORD` must be at least 12 characters
 - `JWT_SECRET` must be at least 32 characters
 - `GIT_SYNC_INTERVAL_SECONDS` must be a non-negative integer
 - `PORT` must be a valid port number (1-65535)

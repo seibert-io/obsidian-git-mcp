@@ -7,13 +7,11 @@ import { handleMetadata } from "../src/oauth/metadata.js";
 import { handleRegistration } from "../src/oauth/registration.js";
 import { handleAuthorizeGet, handleAuthorizePost } from "../src/oauth/authorize.js";
 import { handleToken } from "../src/oauth/token.js";
-import { bearerAuth } from "../src/auth.js";
+import { jwtAuth } from "../src/auth.js";
 import { createAccessToken } from "../src/oauth/jwt.js";
-import { oauthStore } from "../src/oauth/store.js";
 import type { Config } from "../src/config.js";
 
 const testConfig: Config = {
-  mcpApiToken: "test-token-abcdef1234567890",
   gitRepoUrl: "https://example.com/repo.git",
   gitBranch: "main",
   gitSyncIntervalSeconds: 0,
@@ -43,8 +41,8 @@ describe("OAuth 2.1 Endpoints", () => {
     app.post("/oauth/authorize", express.urlencoded({ extended: false }), handleAuthorizePost(testConfig));
     app.post("/oauth/token", express.urlencoded({ extended: false }), handleToken(testConfig));
 
-    // Protected endpoint for auth testing
-    app.use("/mcp", bearerAuth(testConfig.mcpApiToken, testConfig.jwtSecret));
+    // Protected endpoint for auth testing (OAuth JWT only)
+    app.use("/mcp", jwtAuth(testConfig.jwtSecret));
     app.post("/mcp", express.json(), (_req, res) => {
       res.json({ ok: true });
     });
@@ -398,18 +396,6 @@ describe("OAuth 2.1 Endpoints", () => {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${jwt}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({}),
-    });
-    expect(res.status).toBe(200);
-  });
-
-  it("auth middleware accepts static bearer token", async () => {
-    const res = await fetch(`${baseUrl}/mcp`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${testConfig.mcpApiToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({}),

@@ -5,7 +5,6 @@ services:
       - "3000:3000"
     environment:
       # Required
-      - MCP_API_TOKEN=your-secret-token-here
       - GIT_REPO_URL=https://github.com/user/obsidian-vault.git
       # Required — OAuth 2.1
       - OAUTH_PASSWORD=your-vault-authorization-password
@@ -23,7 +22,8 @@ services:
       - VAULT_PATH=/vault
       - PORT=3000
       - LOG_LEVEL=info
-    # Uncomment the following to mount a local vault instead of using git sync:
+    # Uncomment the following to customize:
     # volumes:
-    #   - /path/to/local/vault:/vault
+    #   - /path/to/local/vault:/vault              # Mount local vault
+    #   - ./custom-prompts:/app/prompts             # Custom vault conventions/templates
     restart: unless-stopped

@@ -4,7 +4,8 @@ A Dockerized [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) se
 
 ## Features
 
-- **13 MCP tools** for reading, writing, searching, and managing vault files
+- **14 MCP tools** for reading, writing, searching, and managing vault files
+- **Vault guides & prompts** — teaches Claude Obsidian conventions, templates, and search strategies
 - **Git sync** — automatically clones, pulls, and pushes your vault via Git
 - **OAuth 2.1** with PKCE and Dynamic Client Registration for Claude.ai
 - **Path sandboxing** — all operations are confined to the vault directory
@@ -30,9 +31,8 @@ Edit `.env` with your settings:
 
 ```bash
 # Required
-MCP_API_TOKEN=<generate with: openssl rand -hex 32>
 GIT_REPO_URL=https://github.com/your-user/your-obsidian-vault.git
-OAUTH_PASSWORD=<choose a strong password>
+OAUTH_PASSWORD=<choose a strong password (min 12 chars)>
 JWT_SECRET=<generate with: openssl rand -hex 32>
 SERVER_URL=https://your-server.example.com
 ```
@@ -82,16 +82,30 @@ curl http://localhost:3000/health
 | `get_vault_info` | Get vault statistics |
 | `get_backlinks` | Find notes that link to a given note |
 | `get_tags` | Extract tags from a note |
+| `get_obsidian_guide` | Best-practice guides for vault conventions, templates, search |
 
 Every write operation (write, edit, delete, rename) automatically commits and pushes changes via Git.
+
+### Vault Guides & MCP Prompts
+
+The `get_obsidian_guide` tool and three MCP prompts teach the connected client (e.g., Claude) how to work optimally with your vault:
+
+- **Conventions** — link syntax (`[[wikilinks]]`), frontmatter, tags, callouts
+- **Create note** — templates for zettel, meeting, daily, project, and literature notes
+- **Search strategy** — which tool to use for different search scenarios
+
+Guide content is stored in `prompts/` and can be customized via a Docker volume mount:
+```yaml
+volumes:
+  - ./my-prompts:/app/prompts
+```
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `MCP_API_TOKEN` | yes | — | Static bearer token (min 16 chars) |
 | `GIT_REPO_URL` | yes | — | Git remote URL (HTTPS or SSH) |
-| `OAUTH_PASSWORD` | yes | — | Authorization page password |
+| `OAUTH_PASSWORD` | yes | — | Authorization page password (min 12 chars) |
 | `JWT_SECRET` | yes | — | JWT signing secret (min 32 chars) |
 | `SERVER_URL` | yes | — | Public server URL |
 | `GIT_BRANCH` | no | `main` | Git branch to sync |
@@ -128,7 +142,7 @@ Obsidian (iPhone/Mac)          Docker Container
 │  Obsidian Git    │ ◄──────► │       ↕ /vault           │
 │  Plugin          │          │  MCP Server (Express)     │
 └─────────────────┘           │  - OAuth 2.1 auth        │
-                              │  - 13 filesystem tools   │
+                              │  - 14 MCP tools          │
 Claude.ai          SSE/HTTP   │  - Path sandboxing       │
 ┌─────────────────┐ ◄──────► │  - Streamable HTTP       │
 │  Claude.ai       │  OAuth   └──────────────────────────┘

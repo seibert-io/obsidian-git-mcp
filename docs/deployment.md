@@ -11,7 +11,6 @@ docker build -t obsidian-mcp-server .
 ```bash
 docker run -d \
   -p 3000:3000 \
-  -e MCP_API_TOKEN=$(openssl rand -hex 32) \
   -e GIT_REPO_URL=https://github.com/user/vault.git \
   -e OAUTH_PASSWORD=your-vault-password \
   -e JWT_SECRET=$(openssl rand -hex 32) \
@@ -34,9 +33,8 @@ The Docker image does not require build arguments. All configuration is via runt
 
 | Variable | Description |
 |---|---|
-| `MCP_API_TOKEN` | Static bearer token (min 16 chars). Used for legacy/direct API access. |
 | `GIT_REPO_URL` | Git remote URL for the Obsidian vault. |
-| `OAUTH_PASSWORD` | Password users enter on the OAuth authorization page. |
+| `OAUTH_PASSWORD` | Password users enter on the OAuth authorization page (min 12 chars). |
 | `JWT_SECRET` | HMAC secret for JWT access tokens (min 32 chars). |
 | `SERVER_URL` | Public URL of the server, used in OAuth metadata (e.g., `https://mcp.example.com`). |
 
@@ -76,9 +74,15 @@ The Docker image does not require build arguments. All configuration is via runt
    - Exchange the auth code for tokens automatically
 6. The MCP tools will appear in Claude's tool list
 
-### Legacy Direct Access
+### Custom Vault Guides
 
-For non-OAuth clients, set the `Authorization: Bearer <MCP_API_TOKEN>` header on requests to `/mcp`.
+To override the built-in guide/prompt content, mount a volume over the prompts directory:
+```yaml
+volumes:
+  - ./my-prompts:/app/prompts
+```
+
+The directory should contain: `obsidian-conventions.md`, `obsidian-create-note.md`, `obsidian-search-strategy.md`.
 
 ## Health Check
 

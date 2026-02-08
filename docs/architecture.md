@@ -24,8 +24,8 @@ The Obsidian Vault MCP Server is a Dockerized Node.js application that exposes a
 
 ## Request Flow
 
-1. Client sends HTTP POST to `/mcp` with `Authorization: Bearer <token>` (JWT or static)
-2. `bearerAuth` middleware validates the token (tries JWT first, then static comparison)
+1. Client sends HTTP POST to `/mcp` with `Authorization: Bearer <token>` (JWT)
+2. `jwtAuth` middleware validates the JWT access token
 3. `StreamableHTTPServerTransport` handles the MCP protocol (session management, SSE)
 4. `McpServer` dispatches to the appropriate tool handler
 5. Tool handler validates paths, performs FS operations, optionally triggers git commit+push
@@ -53,7 +53,7 @@ src/
 ├── index.ts                # Entry point: config → vault init → server start
 ├── server.ts               # McpServer creation + tool registration
 ├── transport.ts            # Express app + StreamableHTTP transport setup
-├── auth.ts                 # Dual-mode auth middleware (JWT + static bearer)
+├── auth.ts                 # JWT auth middleware (OAuth 2.1)
 ├── config.ts               # Environment variable parsing
 ├── oauth/
 │   ├── metadata.ts         # /.well-known/oauth-authorization-server
@@ -66,7 +66,12 @@ src/
 │   ├── fileOperations.ts   # read_file, write_file, edit_file, delete_file, rename_file
 │   ├── directoryOps.ts     # list_directory, create_directory
 │   ├── searchOperations.ts # search_files, grep, find_files
-│   └── vaultOperations.ts  # get_vault_info, get_backlinks, get_tags
+│   ├── vaultOperations.ts  # get_vault_info, get_backlinks, get_tags
+│   └── guideOperations.ts  # get_obsidian_guide
+├── guides/
+│   └── guideLoader.ts      # Guide file loading with mtime-based caching
+├── prompts/
+│   └── promptHandler.ts    # MCP prompt registration
 ├── git/
 │   └── gitSync.ts          # clone, pull, commit+push, periodic sync
 └── utils/

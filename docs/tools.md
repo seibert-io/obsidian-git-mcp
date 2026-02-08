@@ -76,3 +76,27 @@ Find all notes linking to a given note via `[[wikilink]]` syntax.
 Extract all tags from the vault or a specific file. Parses `#tag` inline syntax and YAML frontmatter `tags:` field.
 - **Input**: `{ path?: string }`
 - **Returns**: Tag list sorted by frequency
+
+## Guide Operations (`src/tools/guideOperations.ts`)
+
+### `get_obsidian_guide`
+Returns best-practice guides for working with the Obsidian vault. Call this before creating or searching notes if unsure about vault conventions, link syntax, frontmatter format, or which search tool to use.
+- **Input**: `{ topic: "conventions" | "create-note" | "search-strategy" | "all", note_type?: "daily" | "meeting" | "project" | "zettel" | "literature" }`
+- **Returns**: Guide content as markdown text
+- **Topics**:
+  - `conventions` — Vault link syntax, frontmatter, tags, callouts, best practices
+  - `create-note` — Note template for the given `note_type` (default: zettel)
+  - `search-strategy` — Which search tool to use when
+  - `all` — All guides concatenated
+
+## MCP Prompts
+
+Three prompts are registered for clients that support the MCP prompts capability:
+
+| Prompt | Description | Arguments |
+|---|---|---|
+| `obsidian-conventions` | Vault conventions, link syntax, frontmatter, tags | none |
+| `obsidian-create-note` | Template for a new note | `topic` (required), `note_type` (optional) |
+| `obsidian-search-strategy` | Which search tool to use when | none |
+
+Prompts return the same content as the `get_obsidian_guide` tool, reading from the same markdown source files in `prompts/`.

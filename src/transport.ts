@@ -2,7 +2,7 @@ import express from "express";
 import crypto from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { bearerAuth } from "./auth.js";
+import { jwtAuth } from "./auth.js";
 import { handleMetadata } from "./oauth/metadata.js";
 import { handleRegistration } from "./oauth/registration.js";
 import { handleAuthorizeGet, handleAuthorizePost } from "./oauth/authorize.js";
@@ -32,8 +32,8 @@ export async function startHttpServer(
   app.post("/oauth/authorize", express.urlencoded({ extended: false }), handleAuthorizePost(config));
   app.post("/oauth/token", express.urlencoded({ extended: false }), handleToken(config));
 
-  // Auth middleware for all /mcp routes
-  app.use("/mcp", bearerAuth(config.mcpApiToken, config.jwtSecret));
+  // Auth middleware for all /mcp routes (OAuth 2.1 JWT only)
+  app.use("/mcp", jwtAuth(config.jwtSecret));
 
   // Health check endpoint (no auth required)
   app.get("/health", (_req, res) => {

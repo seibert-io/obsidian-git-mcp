@@ -27,6 +27,9 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
+# Copy default guide/prompt files (can be overridden via volume mount)
+COPY prompts/ ./prompts/
+
 # Create vault directory
 RUN mkdir -p /vault && chown mcpuser:mcpuser /vault
 

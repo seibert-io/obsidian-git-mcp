@@ -19,7 +19,6 @@ const TEST_VAULT = "/tmp/test-vault-integration";
 
 // Create a config that skips git operations by pointing to a non-git dir
 const testConfig: Config = {
-  mcpApiToken: "test-token-abcdef1234567890",
   gitRepoUrl: "https://example.com/repo.git",
   gitBranch: "main",
   gitSyncIntervalSeconds: 0,

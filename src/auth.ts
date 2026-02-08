@@ -1,15 +1,12 @@
-import crypto from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { verifyAccessToken } from "./oauth/jwt.js";
 import { logger } from "./utils/logger.js";
 
 /**
- * Express middleware that validates authentication.
- * Supports both:
- *   1. OAuth 2.1 JWT access tokens (from /oauth/token flow)
- *   2. Static bearer tokens (legacy MCP_API_TOKEN)
+ * Express middleware that validates OAuth 2.1 JWT access tokens.
+ * Only JWT tokens issued via the /oauth/token flow are accepted.
  */
-export function bearerAuth(apiToken: string, jwtSecret: string) {
+export function jwtAuth(jwtSecret: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const authHeader = req.headers.authorization;
 
@@ -33,17 +30,8 @@ export function bearerAuth(apiToken: string, jwtSecret: string) {
 
     const token = parts[1];
 
-    // Try JWT verification first (OAuth 2.1 flow)
     const jwtPayload = verifyAccessToken(token, jwtSecret);
     if (jwtPayload) {
-      next();
-      return;
-    }
-
-    // Fall back to static bearer token comparison (timing-safe)
-    const tokenBuf = Buffer.from(token);
-    const apiTokenBuf = Buffer.from(apiToken);
-    if (tokenBuf.length === apiTokenBuf.length && crypto.timingSafeEqual(tokenBuf, apiTokenBuf)) {
       next();
       return;
     }

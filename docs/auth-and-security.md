@@ -2,27 +2,15 @@
 
 ## Authentication
 
-### Dual-Mode Auth (`src/auth.ts`)
+### JWT Auth (`src/auth.ts`)
 
-All requests to `/mcp` must include an `Authorization: Bearer <token>` header. The middleware supports two token types:
-
-1. **JWT access tokens** — issued via the OAuth 2.1 flow (`/oauth/token`). Verified using the `JWT_SECRET`.
-2. **Static bearer tokens** — configured via `MCP_API_TOKEN`. Compared using timing-safe equality.
-
-JWT verification is attempted first. If it fails, the static token comparison is tried.
+All requests to `/mcp` must include an `Authorization: Bearer <token>` header with a valid JWT access token issued via the OAuth 2.1 flow (`/oauth/token`). Tokens are verified using the `JWT_SECRET` with audience and issuer claims checked.
 
 Unauthenticated endpoints: `/health`, `/.well-known/oauth-authorization-server`, `/oauth/*`.
 
 ### OAuth 2.1 (`src/oauth/`)
 
 Full OAuth 2.1 implementation with PKCE (S256) and Dynamic Client Registration. See `docs/oauth.md` for details.
-
-### Static Token Format
-
-For production use, generate a strong random token (min 16 characters):
-```bash
-openssl rand -hex 32
-```
 
 ## Path Security (`src/utils/pathValidation.ts`)
 

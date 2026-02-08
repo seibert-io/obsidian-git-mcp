@@ -1,5 +1,4 @@
 export interface Config {
-  mcpApiToken: string;
   gitRepoUrl: string;
   gitBranch: string;
   gitSyncIntervalSeconds: number;
@@ -16,17 +15,7 @@ export interface Config {
   refreshTokenExpirySeconds: number;
 }
 
-const MIN_TOKEN_LENGTH = 16;
-
 export function loadConfig(): Config {
-  const mcpApiToken = process.env.MCP_API_TOKEN;
-  if (!mcpApiToken) {
-    throw new Error("MCP_API_TOKEN environment variable is required");
-  }
-  if (mcpApiToken.length < MIN_TOKEN_LENGTH) {
-    throw new Error(`MCP_API_TOKEN must be at least ${MIN_TOKEN_LENGTH} characters`);
-  }
-
   const gitRepoUrl = process.env.GIT_REPO_URL;
   if (!gitRepoUrl) {
     throw new Error("GIT_REPO_URL environment variable is required");
@@ -99,7 +88,6 @@ export function loadConfig(): Config {
   }
 
   return {
-    mcpApiToken,
     gitRepoUrl,
     gitBranch,
     gitSyncIntervalSeconds: syncInterval,
