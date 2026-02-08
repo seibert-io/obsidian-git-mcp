@@ -68,7 +68,7 @@ The Docker image does not require build arguments. All configuration is via runt
 
 - **Base image**: `node:22-slim`
 - **Multi-stage build**: TypeScript compiled in builder stage, only `dist/` and production deps in runtime
-- **System deps**: `git`, `curl` (for health checks)
+- **System deps**: `git`, `curl` (for health checks), `ca-certificates` (for HTTPS git remotes)
 - **Non-root user**: `mcpuser` for runtime
 - **Health check**: `curl -f http://localhost:3000/health` every 30s
 - **Exposed port**: 3000
