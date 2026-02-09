@@ -106,18 +106,32 @@ The `caddy_data` volume stores certificates and ACME state. It **must** be persi
 - **Caddy**: `80:80` and `443:443` (public)
 - **MCP**: `expose: 3000` (internal Docker network only, not accessible from outside)
 
-## Connecting from Claude.ai (OAuth 2.1)
+## Connecting MCP Clients
+
+### Claude.ai (OAuth 2.1)
 
 1. Deploy the server with a public HTTPS URL (or tunnel)
 2. Set `SERVER_URL` to your public URL
 3. In Claude.ai, go to Settings and add a Custom MCP Integration
-4. Enter the server URL: `https://your-server.example.com`
+4. Enter the **base URL** (without `/mcp`): `https://your-server.example.com`
 5. Claude.ai will:
    - Discover endpoints via `/.well-known/oauth-authorization-server`
    - Register as a client via `POST /oauth/register`
    - Redirect you to GitHub where you sign in with an allowed account
    - Exchange the auth code for tokens automatically
 6. The MCP tools will appear in Claude's tool list
+
+### Claude Code (CLI)
+
+Claude Code requires the **full MCP endpoint URL** with `/mcp`:
+
+```bash
+claude mcp add obsidian-vault --transport http https://your-server.example.com/mcp -s user
+```
+
+On first use, Claude Code triggers the OAuth flow in your browser. After GitHub authentication, the connection is active.
+
+> **Why different URLs?** Claude.ai uses the base URL and discovers the MCP endpoint via `/.well-known/oauth-protected-resource` (RFC 9728). Claude Code connects directly to the Streamable HTTP transport endpoint and needs the explicit path.
 
 ### Custom Vault Guides
 
