@@ -1,130 +1,161 @@
 # Obsidian Vault MCP Server
 
-A Dockerized [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server that exposes a Git-synced [Obsidian](https://obsidian.md/) vault as a set of file and search tools over Streamable HTTP. Designed for use with Claude.ai Custom MCP Integrations.
+A bridge that gives [Claude](https://claude.ai/) (claude.ai, Claude Mobile, Claude Code) and other MCP-capable AI tools read and write access to your [Obsidian](https://obsidian.md/) vault — similar to how Claude Code interacts with local files, but remotely via the [Model Context Protocol](https://modelcontextprotocol.io/).
 
-## Features
+- **`CLAUDE.md` support** — place `CLAUDE.md` files in your vault to provide context-specific instructions to Claude, just like with Claude Code or Claude Cowork
+- **Vault guides** — teaches Claude Obsidian conventions, note templates, and search strategies
+- **Authentication** — GitHub OAuth with a username allowlist controls who can access the vault
+- **Automatic HTTPS** — Let's Encrypt certificates via Caddy, no manual setup
 
-- **14 MCP tools** for reading, writing, searching, and managing vault files
-- **CLAUDE.md Discovery** — delivers vault-specific instructions via `CLAUDE.md` files (root via MCP instructions, subdirectories via `get_claude_context` tool)
-- **Vault guides & prompts** — teaches Claude Obsidian conventions, templates, and search strategies
-- **Git sync** — automatically clones, pulls, and pushes your vault via Git
-- **GitHub OAuth** — authenticate via GitHub, with username allowlist
-- **OAuth 2.1** with PKCE and Dynamic Client Registration for Claude.ai
-- **Path sandboxing** — all operations are confined to the vault directory
-- **HTTPS via Caddy** — automatic Let's Encrypt certificates in production
-- **Docker-ready** — multi-stage build, non-root user, health checks
+> **Note:** Skills that might be stored in a vault repository cannot beloaded. To use them, add them directly in Claude Desktop, claude.ai, or Claude Mobile as you would with any other skill.
 
-## Quick Start
+All you need is an existing [Obsidian Git](https://github.com/Vinzent03/obsidian-git) sync, a small server, and a `.env` file.
 
-### Prerequisites
+## Prerequisites
 
-- Docker and Docker Compose
-- A Git repository containing your Obsidian vault
-- A publicly accessible URL (for Claude.ai integration)
+- **Obsidian Git Sync** set up via the [Obsidian Git Plugin](https://github.com/Vinzent03/obsidian-git) to a Git repository of your choice, e.g. on Github. 
+- **A server or service with a public IP** (e.g. Hetzner, AWS, Azure) that can run and publicly expose Docker containers
+- **Docker and Docker Compose** installed on the server
+- **A (sub-)domain name of your choice** with DNS pointing to the server's IP address
+- **Ports 80 and 443** reachable from the internet
 
-### 1. Clone and configure
+## Getting Started
+
+### Step 1: Create a GitHub OAuth App
+
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers) and click **"New OAuth App"**
+2. Fill in the fields:
+   - **Application name**: `Obsidian MCP Server` (or any name you like)
+   - **Homepage URL**: `https://your-domain.example.com` (replace with your chosen domain name)
+   - **Authorization callback URL**: `https://your-domain.example.com/oauth/github/callback` (replace with your chosen domain name, but keep path)
+3. Click **"Register application"**
+4. Copy the **Client ID**
+5. Click **"Generate a new client secret"** and copy the secret immediately (it's only shown once)
+
+### Step 2: Create a GitHub Personal Access Token
+
+1. Go to [Personal Access Tokens](https://github.com/settings/personal-access-tokens/new) and create a **Fine-Grained Personal Access Token**
+2. Choose if you want the token to automatically expire (more secure, more effort) or not (less secure, less effort)
+2. Select your vault repository under **"Only select repositories"**
+3. Under **Repository permissions**, set **Contents** to **Read and Write**
+4. Copy the token
+5. 
+
+### Step 3: Clone and configure
 
 ```bash
-git clone https://github.com/your-org/obsidian-github-mcp.git
+git clone https://github.com/seibert-io/obsidian-github-mcp.git
 cd obsidian-github-mcp
 cp .env.example .env
 ```
 
-Edit `.env` with your settings:
+Edit `.env` with your values:
 
 ```bash
-# Required
-GIT_REPO_URL=https://github.com/your-user/your-obsidian-vault.git
-GITHUB_CLIENT_ID=<from your GitHub OAuth App>
-GITHUB_CLIENT_SECRET=<from your GitHub OAuth App>
+# Your domain (Caddy uses this for automatic HTTPS)
+SERVER_DOMAIN=your-domain.example.com
+
+# Your vault repository — insert your Personal Access Token from Step 2
+GIT_REPO_URL=https://<YOUR-PERSONAL-ACCESS-TOKEN>@github.com/<user>/<vault-repo>.git
+
+# GitHub OAuth App credentials from Step 1
+GITHUB_CLIENT_ID=your-client-id
+GITHUB_CLIENT_SECRET=your-client-secret
+
+# GitHub usernames that should have access (comma-separated)
 ALLOWED_GITHUB_USERS=your-github-username
-JWT_SECRET=<generate with: openssl rand -hex 32>
-SERVER_URL=https://your-server.example.com
+
+# Generate a random secret with min 32 characters, e.g. via  `openssl rand -hex 64`
+JWT_SECRET=your-generated-secret
 ```
 
-### 2. Build and run
+### Step 4: Start
 
 ```bash
 docker compose up -d
 ```
 
-Or build manually:
+Caddy automatically obtains a Let's Encrypt certificate on first start (takes about 10–30 seconds).
+
+### Step 5: Connect your AI tool
+
+<details>
+<summary><strong>Claude.ai</strong></summary>
+
+1. Go to **Settings** → **Connectors** → **"Add custom connector"**
+2. Enter the URL: `https://your-domain.example.com/mcp`
+3. Claude redirects you to GitHub — sign in with an account listed in `ALLOWED_GITHUB_USERS`
+4. Done — the vault tools will appear in Claude's tool list
+
+</details>
+
+<details>
+<summary><strong>Claude Code (CLI)</strong></summary>
 
 ```bash
-docker build -t obsidian-mcp-server .
-docker run -d -p 3000:3000 --env-file .env obsidian-mcp-server
+claude mcp add obsidian-vault --transport http https://your-domain.example.com/mcp -s user
 ```
 
-### 3. Verify it's running
+On first use, the OAuth flow opens in your browser. After signing in with GitHub, the connection is active.
+
+</details>
+
+<details>
+<summary><strong>Other MCP-capable tools</strong></summary>
+
+Please refer to your tool's documentation on how to register remote MCP servers. The MCP endpoint URL is:
+
+```
+https://your-domain.example.com/mcp
+```
+
+</details>
+
+## Updating to a Newer Version
+
+On your server, navigate to the directory where you cloned this repository, then pull the latest changes and rebuild:
 
 ```bash
-curl http://localhost:3000/health
-# {"status":"ok"}
+cd /path/to/obsidian-github-mcp
+git pull
+docker compose up -d --build
 ```
 
-### 4. Connect from Claude.ai
+## CLAUDE.md and Vault Guides
 
-1. In Claude.ai, go to **Settings** and add a **Custom MCP Integration**
-2. Enter the MCP endpoint URL: `https://your-server.example.com/mcp`
-3. Claude.ai will automatically discover the OAuth endpoints, register as a client, and redirect you to GitHub
-4. Sign in with a GitHub account that is in your `ALLOWED_GITHUB_USERS` list
-5. The vault tools will appear in Claude's tool list
+### CLAUDE.md
 
-### 5. Connect from Claude Code (CLI)
+A `CLAUDE.md` file in the **root** of your vault is automatically delivered to clients when they connect — just like with Claude Code or Claude Cowork. Use it to give Claude vault-wide instructions (naming conventions, folder structure, preferred formats, etc.).
 
-```bash
-claude mcp add obsidian-vault --transport http https://your-server.example.com/mcp -s user
-```
+Subdirectory `CLAUDE.md` files are also supported. Clients are instructed to load and follow the `CLAUDE.md` of any subdirectory they are working in via the `get_claude_context` tool.
 
-On first use, Claude Code will trigger the OAuth flow in your browser. After authenticating with GitHub, the server is ready.
+### Vault Guides
 
-## Available Tools
-
-| Tool | Description |
-|---|---|
-| `read_file` | Read the contents of a file |
-| `write_file` | Create or overwrite a file |
-| `edit_file` | Apply search-and-replace edits to a file |
-| `delete_file` | Delete a file |
-| `rename_file` | Rename or move a file |
-| `list_directory` | List files and subdirectories |
-| `create_directory` | Create a new directory |
-| `search_files` | Find files matching a glob pattern |
-| `grep` | Search file contents with regex |
-| `find_files` | Find files with time/size filters |
-| `get_vault_info` | Get vault statistics |
-| `get_backlinks` | Find notes that link to a given note |
-| `get_tags` | Extract tags from a note |
-| `get_obsidian_guide` | Best-practice guides for vault conventions, templates, search |
-| `get_claude_context` | CLAUDE.md instructions for a specific vault subdirectory path |
-
-Every write operation (write, edit, delete, rename) automatically commits and pushes changes via Git.
-
-### Vault Guides & MCP Prompts
-
-The `get_obsidian_guide` tool and three MCP prompts teach the connected client (e.g., Claude) how to work optimally with your vault:
+The `get_obsidian_guide` tool and MCP prompts teach Claude how to work with your vault:
 
 - **Conventions** — link syntax (`[[wikilinks]]`), frontmatter, tags, callouts
 - **Create note** — templates for zettel, meeting, daily, project, and literature notes
 - **Search strategy** — which tool to use for different search scenarios
 
 Guide content is stored in `prompts/` and can be customized via a Docker volume mount:
+
 ```yaml
 volumes:
   - ./my-prompts:/app/prompts
 ```
 
-## Environment Variables
+<details>
+<summary><strong>Environment Variables</strong></summary>
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GIT_REPO_URL` | yes | — | Git remote URL (HTTPS or SSH) |
+| `SERVER_DOMAIN` | yes | — | Domain for HTTPS via Caddy (e.g., `vault.example.com`) |
+| `GIT_REPO_URL` | yes | — | Git remote URL (HTTPS with PAT recommended) |
 | `GITHUB_CLIENT_ID` | yes | — | GitHub OAuth App Client ID |
 | `GITHUB_CLIENT_SECRET` | yes | — | GitHub OAuth App Client Secret |
 | `ALLOWED_GITHUB_USERS` | yes | — | Comma-separated allowed GitHub usernames |
 | `JWT_SECRET` | yes | — | JWT signing secret (min 32 chars) |
-| `SERVER_URL` | yes* | — | Public server URL (auto-derived in production from `SERVER_DOMAIN`) |
-| `SERVER_DOMAIN` | yes (prod) | — | Domain for HTTPS via Caddy (e.g., `vault.example.com`) |
+| `SERVER_URL` | — | auto | Auto-derived from `SERVER_DOMAIN` |
 | `GIT_BRANCH` | no | `main` | Git branch to sync |
 | `GIT_SYNC_INTERVAL_SECONDS` | no | `300` | Pull interval (0 to disable) |
 | `GIT_USER_NAME` | no | `Claude MCP` | Git commit author name |
@@ -135,252 +166,59 @@ volumes:
 | `ACCESS_TOKEN_EXPIRY_SECONDS` | no | `3600` | JWT token lifetime |
 | `REFRESH_TOKEN_EXPIRY_SECONDS` | no | `604800` | Refresh token lifetime (7 days) |
 
-## GitHub OAuth einrichten
+</details>
 
-Der Server authentifiziert User über GitHub. Nur explizit freigegebene GitHub-Accounts erhalten Zugriff.
+## Troubleshooting
 
-### 1. GitHub OAuth App erstellen
-
-1. Gehe zu https://github.com/settings/developers
-2. Klicke auf **"New OAuth App"**
-3. Fülle die Felder aus:
-   - **Application name**: `Obsidian MCP Server` (frei wählbar)
-   - **Homepage URL**: Die öffentliche URL deines Servers, z.B. `https://vault.example.com`
-   - **Authorization callback URL**: `https://vault.example.com/oauth/github/callback`
-     (Ersetze `vault.example.com` mit deiner tatsächlichen Server-URL)
-4. Klicke **"Register application"**
-5. Auf der nächsten Seite siehst du die **Client ID** — kopiere sie
-6. Klicke auf **"Generate a new client secret"** — kopiere das Secret sofort (wird nur einmal angezeigt)
-
-### 2. Environment Variables konfigurieren
-
-Trage die Werte in deine `.env` oder `docker-compose.yml` ein:
-
-```
-GITHUB_CLIENT_ID=<Client ID von Schritt 5>
-GITHUB_CLIENT_SECRET=<Client Secret von Schritt 6>
-ALLOWED_GITHUB_USERS=dein-github-username
-```
-
-Für mehrere User komma-separiert:
-
-```
-ALLOWED_GITHUB_USERS=user1,user2,user3
-```
-
-### 3. Server starten
-
-```bash
-docker compose up -d
-```
-
-### 4. In Claude.ai verbinden
-
-1. Gehe zu https://claude.ai → Settings → Connectors
-2. Klicke **"Add custom connector"**
-3. Gib die MCP-Endpoint-URL ein: `https://vault.example.com/mcp`
-4. Claude leitet dich zu GitHub weiter — melde dich an
-5. Nach erfolgreicher Anmeldung ist der Connector aktiv
-
-### 5. In Claude Code (CLI) verbinden
-
-```bash
-claude mcp add obsidian-vault --transport http https://vault.example.com/mcp -s user
-```
-
-Beim ersten Zugriff öffnet sich der OAuth-Flow im Browser.
-
-### Troubleshooting
-
-- **"User not authorized"**: Dein GitHub-Username ist nicht in `ALLOWED_GITHUB_USERS` enthalten. Prüfe die Schreibweise (case-insensitive).
-- **GitHub zeigt "The redirect_uri is not valid"**: Die Callback-URL in der GitHub OAuth App stimmt nicht mit `SERVER_URL/oauth/github/callback` überein.
-- **Claude.ai zeigt einen Verbindungsfehler**: Prüfe ob der Server erreichbar ist und HTTPS korrekt konfiguriert ist.
-- **Claude.ai: Connector "inaktiv" trotz erfolgreicher Authentifizierung**: Die URL muss mit `/mcp` enden. Claude.ai postet direkt an die angegebene URL — ohne `/mcp` wird der MCP-Handler nicht erreicht (404). Falls das Problem trotzdem besteht und Cloudflare im Einsatz ist: "Block AI Bots" deaktivieren ([Details](https://github.com/anthropics/claude-ai-mcp/issues/41)).
-- **Claude Code: "Failed to connect"**: Die URL muss mit `/mcp` enden. Der Transport-Typ muss `http` sein (nicht `sse`).
-
-## Production Deployment (HTTPS)
-
-### Voraussetzungen
-
-- Ein Server mit öffentlicher IP (VPS, Cloud VM, etc.)
-- Eine Domain, deren DNS-A-Record auf diese IP zeigt
-- Port 80 und 443 offen (Firewall/Security Group)
-- Docker und Docker Compose installiert
-
-### 1. DNS einrichten
-
-Erstelle einen A-Record bei deinem DNS-Provider:
-
-```
-vault.example.com → <deine-server-ip>
-```
-
-Warte bis der DNS-Eintrag propagiert ist (prüfen mit `dig vault.example.com`).
-
-### 2. GitHub OAuth App konfigurieren
-
-Stelle sicher, dass in deiner GitHub OAuth App die URLs korrekt sind:
-
-- **Homepage URL**: `https://vault.example.com`
-- **Authorization callback URL**: `https://vault.example.com/oauth/github/callback`
-
-### 3. Environment konfigurieren
-
-```bash
-cp .env.example .env
-```
-
-Mindestens:
-
-```bash
-SERVER_DOMAIN=vault.example.com
-GITHUB_CLIENT_ID=<deine-client-id>
-GITHUB_CLIENT_SECRET=<dein-client-secret>
-ALLOWED_GITHUB_USERS=<dein-github-username>
-JWT_SECRET=<zufälliger-string-mindestens-64-zeichen>
-GIT_REPO_URL=https://<PAT>@github.com/<user>/<vault-repo>.git
-```
-
-Tipp: JWT_SECRET generieren:
-
-```bash
-openssl rand -hex 64
-```
-
-### 4. Starten
-
-```bash
-docker compose -f docker-compose.prod.yml up -d
-```
-
-Caddy holt automatisch ein Let's Encrypt Zertifikat. Das dauert beim ersten Start ca. 10-30 Sekunden.
-
-### 5. Prüfen
-
-```bash
-# HTTPS erreichbar?
-curl https://vault.example.com/.well-known/oauth-authorization-server
-
-# Caddy Logs (Cert-Status)
-docker compose -f docker-compose.prod.yml logs caddy
-
-# MCP Server Logs
-docker compose -f docker-compose.prod.yml logs mcp
-```
-
-### 6. Verbinden
-
-**Claude.ai:**
-1. Gehe zu https://claude.ai → Settings → Connectors
-2. Klicke **"Add custom connector"**
-3. URL: `https://vault.example.com/mcp`
-4. Claude leitet dich zu GitHub weiter — anmelden — fertig
-
-**Claude Code (CLI):**
-```bash
-claude mcp add obsidian-vault --transport http https://vault.example.com/mcp -s user
-```
-
-> Beide Clients verwenden die gleiche URL mit `/mcp` am Ende. Claude.ai entdeckt die OAuth-Endpoints über `/.well-known/oauth-protected-resource` relativ zur Basis-Domain.
-
-### Troubleshooting
-
-- **Caddy zeigt "permission denied" auf Port 80/443**: Ports sind belegt oder Firewall blockiert.
-- **"ACME challenge failed"**: DNS zeigt noch nicht auf den Server. Prüfe mit `dig vault.example.com`.
-- **Let's Encrypt Rate Limit**: Passiert nur bei sehr häufigen Neustarts ohne `caddy_data` Volume. Nie das Volume löschen.
-- **Lokal testen ohne Domain**: Nutze `docker compose up` (ohne `-f prod`) für direkten HTTP-Zugriff auf Port 3000.
-- **Claude.ai: Connector "inaktiv" trotz erfolgreicher Authentifizierung**: Die URL muss mit `/mcp` enden (z.B. `https://vault.example.com/mcp`). Claude.ai postet direkt an die angegebene URL. Ohne `/mcp` kommt eine 404-Antwort und der Connector bleibt inaktiv. Falls das Problem trotzdem besteht: (1) Caddy-Logs auf `POST /mcp` prüfen — kommt der Request an? (2) Falls Cloudflare → "Block AI Bots" deaktivieren ([Details](https://github.com/anthropics/claude-ai-mcp/issues/41)).
-- **Claude Code: "Failed to connect"**: URL muss mit `/mcp` enden, Transport-Typ muss `http` sein (nicht `sse`).
-
-### Development vs. Production
-
-| | Development | Production |
-|---|---|---|
-| Compose-Datei | `docker-compose.yml` | `docker-compose.prod.yml` |
-| Zugriff | `http://localhost:3000` | `https://vault.example.com` |
-| HTTPS | Nein | Ja (automatisch via Caddy) |
-| Certs | — | Let's Encrypt (automatisch) |
-| Ports offen | 3000 | 80, 443 |
-
-## Private Repository Access
-
-**HTTPS with Personal Access Token:**
-```
-GIT_REPO_URL=https://<PAT>@github.com/user/vault.git
-```
-
-**SSH (mount key into container):**
-```bash
-docker run -d -p 3000:3000 \
-  -v ~/.ssh/id_ed25519:/home/mcpuser/.ssh/id_ed25519:ro \
-  --env-file .env \
-  obsidian-mcp-server
-```
+- **"User not authorized"**: Your GitHub username is not in `ALLOWED_GITHUB_USERS`. Check the spelling (comparison is case-insensitive).
+- **GitHub shows "The redirect_uri is not valid"**: The callback URL in your GitHub OAuth App doesn't match `https://your-domain.example.com/oauth/github/callback`.
+- **Caddy shows "permission denied" on port 80/443**: The ports are already in use or blocked by a firewall.
+- **"ACME challenge failed"**: DNS doesn't point to the server yet. Check with `dig your-domain.example.com`.
+- **Let's Encrypt rate limit**: Only happens with very frequent restarts without a `caddy_data` volume. Never delete the `caddy_data` Docker volume.
+- **Claude.ai: Connector stays "inactive"**: The URL must end with `/mcp` (e.g., `https://your-domain.example.com/mcp`). If using Cloudflare, disable "Block AI Bots" ([details](https://github.com/anthropics/claude-ai-mcp/issues/41)).
+- **Claude Code: "Failed to connect"**: The URL must end with `/mcp`. The transport type must be `http` (not `sse`).
 
 ## How It Works
 
 ```
-Obsidian (iPhone/Mac)          Docker (Production)
+Obsidian (iPhone/Mac)          Docker Host
 ┌─────────────────┐           ┌──────────────────────────────────┐
-│  Obsidian +      │  git     │  ┌────────────────────────────┐  │
-│  Obsidian Git    │ ◄──────► │  │  Git Sync (periodic)       │  │
-│  Plugin          │          │  └──────┬─────────────────────┘  │
-└─────────────────┘           │         ↕ /vault                  │
+│  Obsidian +     │  git      │  ┌────────────────────────────┐  │
+│  Obsidian Git   │ ◄──────►  │  │  Git Sync (periodic)       │  │
+│  Plugin         │           │  └──────┬─────────────────────┘  │
+└─────────────────┘           │         ↕ /vault                 │
                               │  ┌──────────────────────────┐    │
-Claude.ai          HTTPS      │  │  MCP Server (Express:3000)│    │
-┌─────────────────┐ ◄──────► │  │  - OAuth 2.1 + GitHub     │    │
-│  Claude.ai       │  :443   │  │  - 14 MCP tools           │    │
-│  Custom MCP      │         │  └──────────────────────────┘    │
-└─────────────────┘          │         ↑ reverse_proxy           │
-                              │  ┌──────────────────────────┐    │
-                              │  │  Caddy (:80/:443)         │    │
-                              │  │  - Auto Let's Encrypt     │    │
+Claude / AI Tool    HTTPS     │  │  MCP Server (Express)    │    │
+┌──────────────────┐ ◄──────► │  │  - GitHub OAuth          │    │
+│  claude.ai       │  :443    │  │  - Vault tools (MCP)     │    │
+│  Claude Code     │          │  └──────────────────────────┘    │
+│  Other MCP tools │          │         ↑ reverse proxy          │
+└──────────────────┘          │  ┌──────────────────────────┐    │
+                              │  │  Caddy (:80/:443)        │    │
+                              │  │  - Auto Let's Encrypt    │    │
                               │  └──────────────────────────┘    │
                               └──────────────────────────────────┘
 ```
 
-1. **Obsidian** syncs your vault to a Git repository (via Obsidian Git plugin)
-2. The **MCP server** clones and periodically pulls the vault
-3. **Claude.ai** connects via OAuth 2.1 and accesses the vault through MCP tools
-4. Write operations are committed and pushed back to Git
-5. **CLAUDE.md files** in the vault provide context-specific instructions — root-level instructions are delivered automatically at session start, subdirectory instructions are available via `get_claude_context`
+1. **Obsidian** syncs your vault to a Git repository via the [Obsidian Git Plugin](https://github.com/Vinzent03/obsidian-git)
+2. The **MCP server** clones the repository and periodically pulls changes
+3. **Claude** (or another MCP client) connects via OAuth and accesses the vault through MCP tools
+4. Write operations (create, edit, delete, rename) are automatically committed and pushed back to Git
+5. **`CLAUDE.md` files** in the vault provide context-specific instructions — the root-level file is delivered automatically at session start, subdirectory files are available via the `get_claude_context` tool
 
-## Development
+## Technical Documentation
 
-```bash
-npm install
-npm run dev       # Run with tsx (hot reload)
-npm test          # Run test suite
-npm run build     # Compile TypeScript
-npm run lint      # Type-check
-```
-
-## Security
-
-- GitHub OAuth authentication with username allowlist
-- OAuth 2.1 with PKCE S256 and Dynamic Client Registration
-- JWT access tokens with configurable expiry
-- Refresh token rotation
-- Path traversal and symlink escape prevention
-- `.git` directory access blocked
-- Rate limiting on registration and token endpoints
-- Non-root Docker container
-- Git credential sanitization in error messages
-- File size limits (10 MB) and regex length limits
-
-## Documentation
-
-Detailed documentation is available in `docs/`:
+Detailed technical documentation is available in `docs/`:
 
 | File | Contents |
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | System design, component diagram, request flow |
-| [docs/tools.md](docs/tools.md) | All 14 MCP tool definitions with inputs/outputs |
-| [docs/oauth.md](docs/oauth.md) | OAuth 2.1 flow, DCR, PKCE, JWT, endpoints |
+| [docs/tools.md](docs/tools.md) | MCP tool definitions with inputs/outputs |
+| [docs/oauth.md](docs/oauth.md) | OAuth 2.1 flow, PKCE, JWT, endpoints |
 | [docs/git-sync.md](docs/git-sync.md) | Git clone/pull/push logic, conflict handling |
 | [docs/auth-and-security.md](docs/auth-and-security.md) | Authentication, path security, rate limiting |
 | [docs/configuration.md](docs/configuration.md) | All environment variables with types/defaults |
-| [docs/deployment.md](docs/deployment.md) | Docker, docker-compose, Claude.ai integration |
+| [docs/deployment.md](docs/deployment.md) | Docker, docker-compose, health checks |
 | [docs/testing.md](docs/testing.md) | Test framework and test suites |
 
 ## License
