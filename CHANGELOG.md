@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.3.0...v1.3.1) (2026-02-09)
+
+
+### Bug Fixes
+
+* skip husky in Docker production stage by adding --ignore-scripts to npm ci ([#4](https://github.com/seibert-io/obsidian-git-mcp/issues/4)) ([28f1998](https://github.com/seibert-io/obsidian-git-mcp/commit/28f1998f64fd61e4b84902c3306c44d2085bb5f0))
+
 # [1.3.0](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.2.0...v1.3.0) (2026-02-09)
 
 
