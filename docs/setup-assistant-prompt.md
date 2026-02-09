@@ -112,7 +112,7 @@ If I choose Option A:
 
 ---
 
-### Step 8: Connect an AI tool
+### Step 8: Connect Claude
 
 Ask me which AI tool I want to connect:
 
@@ -123,11 +123,8 @@ Ask me which AI tool I want to connect:
 4. Done — the vault tools appear in Claude's tool list
 
 **Claude Code (CLI):**
-Run this command:
-```
-claude mcp add obsidian-vault --transport http https://<my-domain>/mcp -s user
-```
-On first use, the OAuth flow opens in the browser.
+Tell me to run this command on the Claude Code instance I want to give access to: `claude mcp add obsidian-vault --transport http https://<my-domain>/mcp -s user`
+After adding the server, tell me to type `/mcp` in Claude Code, select the `obsidian-vault` server, and click "Authorize" to complete the OAuth login via the browser.
 
 **Other MCP-capable tools:**
 The MCP endpoint URL is: `https://<my-domain>/mcp`
