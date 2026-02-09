@@ -100,6 +100,25 @@ Show recent changes made to the vault with full diffs. Returns a list of recent 
     +Status: in progress
   ```
 
+## CLAUDE.md Context (`src/tools/claudeContextOperations.ts`)
+
+### `get_claude_context`
+Returns CLAUDE.md instruction files found along the path from vault root to the specified directory. Use this before working in a specific vault subdirectory to discover directory-specific instructions and conventions. The root CLAUDE.md (already provided via server instructions) is excluded.
+- **Input**: `{ path: string }` — vault-relative directory path (e.g. `projects/webapp`)
+- **Returns**: Concatenated CLAUDE.md contents with path headers, or "No CLAUDE.md files found along this path."
+- **How it works**: Walks each segment from vault root to the target path, checks for CLAUDE.md at each level, and returns all found files (excluding root). Uses mtime-based caching for performance.
+- **Root CLAUDE.md**: Delivered separately via the MCP `instructions` field at session initialization. Not included in this tool's output.
+- **Example output** for path `projects/webapp`:
+  ```
+  --- CLAUDE.md in projects/ ---
+  # Project conventions
+  Use kebab-case for filenames.
+
+  --- CLAUDE.md in projects/webapp/ ---
+  # Webapp specifics
+  Components go in components/.
+  ```
+
 ## Guide Operations (`src/tools/guideOperations.ts`)
 
 ### `get_obsidian_guide`

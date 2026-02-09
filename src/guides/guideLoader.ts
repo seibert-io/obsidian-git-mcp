@@ -1,27 +1,8 @@
-import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-
-interface CacheEntry {
-  content: string;
-  mtime: number;
-}
-
-const cache = new Map<string, CacheEntry>();
+import { readCachedFile } from "../utils/fileCache.js";
 
 async function readGuideFile(promptsDir: string, filename: string): Promise<string> {
-  const filePath = path.join(promptsDir, filename);
-  const fileStat = await stat(filePath);
-  const mtime = fileStat.mtimeMs;
-
-  const cacheKey = `${promptsDir}:${filename}`;
-  const cached = cache.get(cacheKey);
-  if (cached && cached.mtime === mtime) {
-    return cached.content;
-  }
-
-  const content = await readFile(filePath, "utf-8");
-  cache.set(cacheKey, { content, mtime });
-  return content;
+  return readCachedFile(path.join(promptsDir, filename));
 }
 
 export async function loadGuide(promptsDir: string, topic: string): Promise<string> {

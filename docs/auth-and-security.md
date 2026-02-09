@@ -85,6 +85,14 @@ All responses include `Access-Control-Allow-Origin: *` so that any MCP client (w
 - `Caddyfile` is mounted read-only (`:ro`)
 - `caddy_data` volume persists certificates to avoid Let's Encrypt rate limits
 
+## CLAUDE.md Trust Model
+
+The vault can contain `CLAUDE.md` files that provide instructions to connected LLM clients. The root `CLAUDE.md` is delivered via the MCP `instructions` field at session initialization; subdirectory `CLAUDE.md` files are accessible via the `get_claude_context` tool.
+
+**Trust assumption:** CLAUDE.md content is delivered unsanitized to the LLM client. Anyone with push access to the vault's git repository can inject arbitrary instructions that the LLM will treat as authoritative server directives. This is analogous to how Claude Code treats `CLAUDE.md` files in local repositories — they are inherently trusted.
+
+**Recommendation:** Only grant git push access to the vault repository to trusted individuals. If the vault has untrusted collaborators, be aware that they can influence LLM behavior via `CLAUDE.md` files.
+
 ## Input Validation
 
 - All tool parameters are validated via Zod schemas before the handler executes

@@ -5,6 +5,7 @@ A Dockerized [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) se
 ## Features
 
 - **14 MCP tools** for reading, writing, searching, and managing vault files
+- **CLAUDE.md Discovery** — delivers vault-specific instructions via `CLAUDE.md` files (root via MCP instructions, subdirectories via `get_claude_context` tool)
 - **Vault guides & prompts** — teaches Claude Obsidian conventions, templates, and search strategies
 - **Git sync** — automatically clones, pulls, and pushes your vault via Git
 - **GitHub OAuth** — authenticate via GitHub, with username allowlist
@@ -95,6 +96,7 @@ On first use, Claude Code will trigger the OAuth flow in your browser. After aut
 | `get_backlinks` | Find notes that link to a given note |
 | `get_tags` | Extract tags from a note |
 | `get_obsidian_guide` | Best-practice guides for vault conventions, templates, search |
+| `get_claude_context` | CLAUDE.md instructions for a specific vault subdirectory path |
 
 Every write operation (write, edit, delete, rename) automatically commits and pushes changes via Git.
 
@@ -341,6 +343,7 @@ Claude.ai          HTTPS      │  │  MCP Server (Express:3000)│    │
 2. The **MCP server** clones and periodically pulls the vault
 3. **Claude.ai** connects via OAuth 2.1 and accesses the vault through MCP tools
 4. Write operations are committed and pushed back to Git
+5. **CLAUDE.md files** in the vault provide context-specific instructions — root-level instructions are delivered automatically at session start, subdirectory instructions are available via `get_claude_context`
 
 ## Development
 

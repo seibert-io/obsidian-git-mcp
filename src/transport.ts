@@ -29,7 +29,7 @@ export interface HttpServerHandle {
 }
 
 export async function startHttpServer(
-  createMcpServer: () => McpServer,
+  createMcpServer: () => Promise<McpServer>,
   config: Config,
 ): Promise<HttpServerHandle> {
   const app = express();
@@ -122,7 +122,7 @@ export async function startHttpServer(
     }
 
     // New session: create a new transport and a dedicated McpServer
-    const mcpServer = createMcpServer();
+    const mcpServer = await createMcpServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
       onsessioninitialized: (newSessionId) => {

@@ -22,7 +22,7 @@ async function main(): Promise<void> {
   startPeriodicSync(config);
 
   // Start HTTP transport (factory creates a fresh McpServer per session)
-  const httpServer = await startHttpServer(() => createMcpServer(config), config);
+  const httpServer = await startHttpServer(async () => createMcpServer(config), config);
 
   // Graceful shutdown
   const shutdown = async () => {

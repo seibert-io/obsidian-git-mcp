@@ -147,6 +147,35 @@ Tests for the vault guide tool and MCP prompts:
 - Prompt `obsidian-create-note` with topic returns template with replaced variables
 - Custom prompts via volume mount override defaults
 
+### CLAUDE.md Discovery (`tests/claudeMd.test.ts`)
+
+Unit and integration tests for the CLAUDE.md discovery feature:
+
+**Unit tests — `loadRootClaudeMd`:**
+- Returns content when `CLAUDE.md` exists in vault root
+- Returns `null` when `CLAUDE.md` does not exist
+- Detects file changes via mtime (cache invalidation)
+
+**Unit tests — `collectClaudeMdFiles`:**
+- Collects `CLAUDE.md` files along path from root to target, excluding root
+- Excludes root `CLAUDE.md`
+- Returns empty array when no `CLAUDE.md` files on the path
+- Rejects path traversal attempts
+- Handles single directory level
+- Handles target path that is vault root (returns empty)
+
+**Integration tests — with root `CLAUDE.md`:**
+- Root `CLAUDE.md` content delivered via MCP `instructions`
+- Instructions include `get_claude_context` hint
+- `get_claude_context` listed in available tools
+- Returns CLAUDE.md files for path with CLAUDE.md
+- Excludes root CLAUDE.md from tool results
+- Returns "No CLAUDE.md files found" for path without files
+- Rejects path traversal in tool input
+
+**Integration tests — without root `CLAUDE.md`:**
+- Instructions contain only `get_claude_context` hint (no root content)
+
 ## Adding Tests
 
 Place new test files in `tests/` with the `.test.ts` extension. Vitest auto-discovers them.
