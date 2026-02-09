@@ -8,22 +8,17 @@ import { registerGuideOperations } from "./tools/guideOperations.js";
 import { registerHistoryOperations } from "./tools/historyOperations.js";
 import { registerClaudeContextOperations } from "./tools/claudeContextOperations.js";
 import { registerPrompts } from "./prompts/promptHandler.js";
-import { loadRootClaudeMd } from "./guides/claudeMdLoader.js";
 
-const CLAUDE_CONTEXT_HINT =
-  "The content of the root CLAUDE.md file (if it exists in the vault) has already been provided to you above as part of these server instructions — do NOT read it again via tools.\n\n" +
-  "When working in a specific subdirectory of this vault, use the `get_claude_context` tool " +
+const INSTRUCTIONS =
+  "IMPORTANT: At the start of every conversation, before performing any vault operations, " +
+  "call the `get_obsidian_guide` tool with topic 'conventions' to load vault-specific instructions and conventions.\n\n" +
+  "When working in a specific subdirectory of this vault, also use the `get_claude_context` tool " +
   "with that directory path to discover additional CLAUDE.md instructions that may apply to that area.";
 
 export async function createMcpServer(config: Config): Promise<McpServer> {
-  const rootClaudeMd = await loadRootClaudeMd(config.vaultPath);
-  const instructions = rootClaudeMd
-    ? `${rootClaudeMd}\n\n---\n${CLAUDE_CONTEXT_HINT}`
-    : CLAUDE_CONTEXT_HINT;
-
   const server = new McpServer(
     { name: "obsidian-vault-mcp", version: "1.0.0" },
-    { instructions },
+    { instructions: INSTRUCTIONS },
   );
 
   registerFileOperations(server, config);

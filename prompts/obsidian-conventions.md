@@ -43,8 +43,8 @@ key:: value
 ## CLAUDE.md Instruktionen
 Dieser Vault kann CLAUDE.md-Dateien enthalten, die dir spezifische Anweisungen geben:
 
-- **Root-CLAUDE.md** (im Vault-Root): Wird automatisch bei Session-Start über die Server-Instructions geliefert. Du hast diese Anweisungen bereits erhalten, falls eine solche Datei existiert.
-- **Unterordner-CLAUDE.md**: Verzeichnisse können eigene CLAUDE.md-Dateien mit ordnerspezifischen Konventionen enthalten (z.B. Namenskonventionen, Vorlagen, Arbeitsweisen).
+- **Root-CLAUDE.md** (im Vault-Root): Wird zusammen mit diesem Guide über `get_obsidian_guide` ausgeliefert. Falls du diesen Guide gerade liest, wurde die Root-CLAUDE.md (sofern vorhanden) bereits oben angezeigt.
+- **Unterordner-CLAUDE.md**: Verzeichnisse können eigene CLAUDE.md-Dateien mit ordnerspezifischen Konventionen enthalten (z.B. Namenskonventionen, Vorlagen, Arbeitsweisen). Jede CLAUDE.md gilt für ihren Ordner und alle Unterordner.
 
 **Wichtig:** Bevor du in einem bestimmten Unterordner arbeitest oder eine Datei in einem Unterordner liest/bearbeitest, rufe `get_claude_context` mit dem jeweiligen Verzeichnispfad auf, um ordnerspezifische Anweisungen zu laden. Beispiel: Vor der Arbeit in `projects/webapp/` → `get_claude_context` mit path `projects/webapp`.
 

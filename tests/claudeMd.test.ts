@@ -137,20 +137,39 @@ describe("Integration: CLAUDE.md Discovery", () => {
       await rm(VAULT_DIR, { recursive: true, force: true });
     });
 
-    it("delivers root CLAUDE.md content via instructions", () => {
+    it("instructions direct client to call get_obsidian_guide", () => {
       const instructions = client.getInstructions();
-      expect(instructions).toContain("# Root Instructions");
+      expect(instructions).toContain("get_obsidian_guide");
+      expect(instructions).toContain("conventions");
     });
 
-    it("appends get_claude_context hint to instructions", () => {
+    it("instructions do not contain root CLAUDE.md content directly", () => {
+      const instructions = client.getInstructions();
+      expect(instructions).not.toContain("# Root Instructions");
+    });
+
+    it("instructions mention get_claude_context for subdirectories", () => {
       const instructions = client.getInstructions();
       expect(instructions).toContain("get_claude_context");
     });
 
-    it("instructs client that root CLAUDE.md is already provided", () => {
-      const instructions = client.getInstructions();
-      expect(instructions).toContain("already been provided");
-      expect(instructions).toContain("do NOT read it again");
+    it("get_obsidian_guide with conventions delivers root CLAUDE.md", async () => {
+      const result = await client.callTool({
+        name: "get_obsidian_guide",
+        arguments: { topic: "conventions" },
+      });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toContain("# Root Instructions");
+      expect(text).toContain("Vault Instructions (CLAUDE.md)");
+    });
+
+    it("get_obsidian_guide with all delivers root CLAUDE.md", async () => {
+      const result = await client.callTool({
+        name: "get_obsidian_guide",
+        arguments: { topic: "all" },
+      });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).toContain("# Root Instructions");
     });
 
     it("lists get_claude_context in available tools", async () => {
@@ -159,7 +178,7 @@ describe("Integration: CLAUDE.md Discovery", () => {
       expect(toolNames).toContain("get_claude_context");
     });
 
-    it("returns CLAUDE.md files for path with CLAUDE.md", async () => {
+    it("returns CLAUDE.md files for path with CLAUDE.md and scope info", async () => {
       const result = await client.callTool({
         name: "get_claude_context",
         arguments: { path: "projects/webapp" },
@@ -167,8 +186,10 @@ describe("Integration: CLAUDE.md Discovery", () => {
       const text = (result.content as Array<{ type: string; text: string }>)[0].text;
       expect(text).toContain("# Project Rules");
       expect(text).toContain("# Webapp Guidelines");
-      expect(text).toContain("projects/");
-      expect(text).toContain("projects/webapp/");
+      expect(text).toContain("CLAUDE.md from projects/");
+      expect(text).toContain("applies to projects/ and all its subdirectories");
+      expect(text).toContain("CLAUDE.md from projects/webapp/");
+      expect(text).toContain("applies to projects/webapp/ and all its subdirectories");
     });
 
     it("excludes root CLAUDE.md from get_claude_context results", async () => {
@@ -225,8 +246,9 @@ describe("Integration: CLAUDE.md Discovery", () => {
       await rm(NO_ROOT_VAULT, { recursive: true, force: true });
     });
 
-    it("sets instructions with only get_claude_context hint when no root CLAUDE.md", () => {
+    it("instructions direct client to call get_obsidian_guide even without root CLAUDE.md", () => {
       const instructions = client.getInstructions();
+      expect(instructions).toContain("get_obsidian_guide");
       expect(instructions).toContain("get_claude_context");
       expect(instructions).not.toContain("# Root Instructions");
     });
