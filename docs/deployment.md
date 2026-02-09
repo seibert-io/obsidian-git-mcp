@@ -133,6 +133,38 @@ volumes:
 
 The directory should contain: `obsidian-conventions.md`, `obsidian-create-note.md`, `obsidian-search-strategy.md`.
 
+## CI/CD Pipeline
+
+### Continuous Integration
+
+Every push to `main` and every pull request targeting `main` triggers the CI workflow (`.github/workflows/ci.yml`), which runs:
+
+1. `npm ci` — install dependencies
+2. `npm run lint` — type-check
+3. `npm run build` — compile TypeScript
+4. `npm test` — run test suite
+
+### Automated Releases
+
+Pushes to `main` trigger the release workflow (`.github/workflows/release.yml`), which uses [semantic-release](https://semantic-release.gitbook.io/) to:
+
+1. Analyze commits since the last release (using [Conventional Commits](https://www.conventionalcommits.org/))
+2. Determine the next semantic version (`fix:` → patch, `feat:` → minor, `BREAKING CHANGE` → major)
+3. Generate release notes and update `CHANGELOG.md`
+4. Update `version` in `package.json` (not published to npm)
+5. Create a GitHub Release with a git tag
+6. Commit the updated `CHANGELOG.md`, `package.json`, and `package-lock.json` back to `main`
+
+**Important**: The `version` field in `package.json` is managed automatically by semantic-release. Do not edit it manually.
+
+### Commit Message Convention
+
+All commits must follow the [Conventional Commits](https://www.conventionalcommits.org/) format. This is enforced locally via [commitlint](https://commitlint.js.org/) + [Husky](https://typicode.github.io/) on the `commit-msg` hook.
+
+Format: `type(optional-scope): description`
+
+Common types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `ci`, `perf`.
+
 ## Health Check
 
 ```bash
