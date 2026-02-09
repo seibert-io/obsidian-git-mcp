@@ -1,6 +1,6 @@
 # Obsidian Vault MCP Server
 
-> Ever wondered how to ask Claude on your phone to add a todo to your Obsidian vault? Quickly look up that info on a contact you know you've jotted down — while on the go? This MCP server makes your Obsidian vault available to Claude and other AI tools, so you can read, search, and edit your notes from any conversation.
+> Ever wondered how to ask Claude on your phone to add a todo to your Obsidian vault? Quickly look up that info on a contact you know you've jotted down — while on the go? This MCP server makes your Obsidian vault available to Claude and other AI tools, so you can read, search, and edit your notes from any conversation, anywhere.
 
 A bridge that gives [Claude](https://claude.ai/) (claude.ai, Claude Mobile, Claude Code) and other MCP-capable AI tools read and write access to your [Obsidian](https://obsidian.md/) vault — similar to how Claude Code interacts with local files, but remotely via the [Model Context Protocol](https://modelcontextprotocol.io/).
 
