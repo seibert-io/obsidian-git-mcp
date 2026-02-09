@@ -47,7 +47,13 @@ describe("resolveVaultPath", () => {
     );
   });
 
-  it("rejects access to .git directory", () => {
+  it("rejects access to .git directory itself", () => {
+    expect(() => resolveVaultPath(VAULT, ".git")).toThrow(
+      PathValidationError,
+    );
+  });
+
+  it("rejects access to .git directory files", () => {
     expect(() => resolveVaultPath(VAULT, ".git/config")).toThrow(
       PathValidationError,
     );
@@ -75,6 +81,41 @@ describe("resolveVaultPath", () => {
     expect(() => resolveVaultPath(VAULT, ".gitattributes")).toThrow(
       PathValidationError,
     );
+  });
+
+  it("rejects access to .claude directory itself", () => {
+    expect(() => resolveVaultPath(VAULT, ".claude")).toThrow(
+      PathValidationError,
+    );
+  });
+
+  it("rejects access to .claude directory files", () => {
+    expect(() => resolveVaultPath(VAULT, ".claude/settings.json")).toThrow(
+      PathValidationError,
+    );
+  });
+
+  it("rejects access to .claude subdirectory", () => {
+    expect(() => resolveVaultPath(VAULT, ".claude/skills/test.md")).toThrow(
+      PathValidationError,
+    );
+  });
+
+  it("rejects nested .claude directory", () => {
+    expect(() => resolveVaultPath(VAULT, "projects/.claude/config")).toThrow(
+      PathValidationError,
+    );
+  });
+
+  it("rejects .claude-prefixed root files (analogous to .gitmodules)", () => {
+    expect(() => resolveVaultPath(VAULT, ".claudeignore")).toThrow(
+      PathValidationError,
+    );
+  });
+
+  it("allows files with claude in the name (not .claude dir)", () => {
+    const result = resolveVaultPath(VAULT, "claude-notes.md");
+    expect(result).toBe("/vault/claude-notes.md");
   });
 
   it("allows files with git in the name (not .git dir)", () => {

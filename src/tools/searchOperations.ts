@@ -48,7 +48,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         const matches = await fg(pattern, {
           cwd: resolved,
           dot: false,
-          ignore: [...HIDDEN_DIRECTORY_GLOBS],
+          ignore: HIDDEN_DIRECTORY_GLOBS,
           followSymbolicLinks: false,
         });
         if (matches.length === 0) {
@@ -95,7 +95,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         const files = await fg(globPattern, {
           cwd: resolved,
           dot: false,
-          ignore: [...HIDDEN_DIRECTORY_GLOBS],
+          ignore: HIDDEN_DIRECTORY_GLOBS,
           onlyFiles: true,
           followSymbolicLinks: false,
         });
@@ -184,7 +184,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         const files = await fg(globPattern, {
           cwd: resolved,
           dot: false,
-          ignore: [...HIDDEN_DIRECTORY_GLOBS],
+          ignore: HIDDEN_DIRECTORY_GLOBS,
           onlyFiles: true,
           stats: true,
           followSymbolicLinks: false,

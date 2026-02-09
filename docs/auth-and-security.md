@@ -27,20 +27,23 @@ All file paths are validated by `resolveVaultPath()` (sync) and `resolveVaultPat
 1. Rejects empty paths
 2. Resolves the path relative to `VAULT_PATH` using `path.resolve()`
 3. Verifies the resolved path starts with the vault directory
-4. Blocks any path component that is `.git` or starts with `.git` at root level
+4. Blocks any path component that matches a hidden directory (`.git`, `.claude`) or starts with `.git` at root level
 5. (Async) Uses `realpath()` to resolve all symlinks (including intermediate directories) and verifies the real path is inside the vault. For non-existent files, walks up the directory tree to find the closest existing ancestor and verifies that.
 
 ### Protected Paths
 
 - `..` traversal — rejected (resolves outside vault)
 - Absolute paths outside vault — rejected
-- `.git/` and subdirectories — rejected (all path components checked)
+- `.git/` and `.claude/` and their subdirectories — rejected (all path components checked against `HIDDEN_DIRECTORIES`)
 - `.gitmodules`, `.gitattributes`, etc. at vault root — rejected
 - Symlinks that escape the vault — rejected by `resolveVaultPathSafe()`
 
 ### Hidden Directories
 
-The `.git` and `.claude` directories are excluded from all tool results (listings, searches, file counts, vault stats). This prevents internal metadata from leaking into client-visible output. The list is centrally defined in `HIDDEN_DIRECTORIES` (`src/utils/constants.ts`). Note that this is a visibility filter, not a security boundary — direct file access via `read_file` is still governed by path validation rules above.
+The directories listed in `HIDDEN_DIRECTORIES` (`src/utils/constants.ts`) — currently `.git` and `.claude` — are protected at two levels:
+
+1. **Access control** (path validation): Direct access via any tool (`read_file`, `write_file`, `edit_file`, `delete_file`, `rename_file`) is blocked by `resolveVaultPath()`. Any path containing a hidden directory component is rejected with a `PathValidationError`.
+2. **Visibility** (listing/search): Hidden directories are excluded from all tool results (`list_directory`, `search_files`, `grep`, `find_files`, `get_vault_info`, `get_backlinks`, `get_tags`) via `isHiddenDirectory()` and `HIDDEN_DIRECTORY_GLOBS`.
 
 ### Error Handling
 

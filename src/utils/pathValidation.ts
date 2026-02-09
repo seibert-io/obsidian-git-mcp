@@ -1,10 +1,11 @@
 import path from "node:path";
 import { realpath } from "node:fs/promises";
+import { HIDDEN_DIRECTORIES } from "./constants.js";
 
 /**
  * Resolves and validates that a given path stays within the vault directory.
  * Returns the resolved absolute path.
- * Throws if the path escapes the vault or accesses .git.
+ * Throws if the path escapes the vault or accesses a hidden directory (.git, .claude).
  */
 export function resolveVaultPath(vaultPath: string, filePath: string): string {
   if (!filePath || filePath.trim() === "") {
@@ -24,11 +25,14 @@ export function resolveVaultPath(vaultPath: string, filePath: string): string {
     );
   }
 
-  // Block access to .git directory and git metadata files in any path component
+  // Block access to hidden directories (.git, .claude) in any path component
+  // and their metadata files (.gitmodules, .claudeignore, etc.) at vault root
   const relative = path.relative(normalizedVault, resolved);
   const parts = relative.split(path.sep);
-  if (parts.some((p) => p === ".git") || parts[0]?.startsWith(".git")) {
-    throw new PathValidationError("Access to git metadata is not allowed");
+  const isHiddenPath = parts.some((p) => HIDDEN_DIRECTORIES.includes(p));
+  const isHiddenRootFile = HIDDEN_DIRECTORIES.some((dir) => parts[0]?.startsWith(dir));
+  if (isHiddenPath || isHiddenRootFile) {
+    throw new PathValidationError("Access to internal metadata is not allowed");
   }
 
   return resolved;

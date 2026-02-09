@@ -247,7 +247,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       arguments: { query: "Skill file" },
     });
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).not.toContain(".claude");
+    expect(text).toBe("No matches found");
   });
 
   it("excludes .claude files from find_files", async () => {
