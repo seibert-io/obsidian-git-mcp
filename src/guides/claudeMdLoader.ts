@@ -21,7 +21,7 @@ export async function collectClaudeMdFiles(
   await resolveVaultPathSafe(vaultPath, targetPath);
 
   const normalizedTarget = path.normalize(targetPath);
-  // Root is excluded — already delivered via MCP instructions
+  // Root is excluded — delivered via get_obsidian_guide tool
   if (normalizedTarget === ".") {
     return [];
   }

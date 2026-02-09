@@ -134,18 +134,18 @@ Show recent changes made to the vault with full diffs. Returns a list of recent 
 ## CLAUDE.md Context (`src/tools/claudeContextOperations.ts`)
 
 ### `get_claude_context`
-Returns CLAUDE.md instruction files found along the path from vault root to the specified directory. Use this before working in a specific vault subdirectory to discover directory-specific instructions and conventions. The root CLAUDE.md (already provided via server instructions) is excluded.
+Returns CLAUDE.md instruction files found along the path from vault root to the specified directory. Use this before working in a specific vault subdirectory to discover directory-specific instructions and conventions. The root CLAUDE.md (delivered via `get_obsidian_guide`) is not included — only subdirectory-level CLAUDE.md files.
 - **Input**: `{ path: string }` — vault-relative directory path (e.g. `projects/webapp`)
-- **Returns**: Concatenated CLAUDE.md contents with path headers, or "No CLAUDE.md files found along this path."
+- **Returns**: Concatenated CLAUDE.md contents with path and scope headers, or "No CLAUDE.md files found along this path."
 - **How it works**: Walks each segment from vault root to the target path, checks for CLAUDE.md at each level, and returns all found files (excluding root). Uses mtime-based caching for performance.
-- **Root CLAUDE.md**: Delivered separately via the MCP `instructions` field at session initialization. Not included in this tool's output.
+- **Root CLAUDE.md**: Delivered via the `get_obsidian_guide` tool (topic `conventions` or `all`). Not included in this tool's output.
 - **Example output** for path `projects/webapp`:
   ```
-  --- CLAUDE.md in projects/ ---
+  --- CLAUDE.md from projects/ (applies to projects/ and all its subdirectories) ---
   # Project conventions
   Use kebab-case for filenames.
 
-  --- CLAUDE.md in projects/webapp/ ---
+  --- CLAUDE.md from projects/webapp/ (applies to projects/webapp/ and all its subdirectories) ---
   # Webapp specifics
   Components go in components/.
   ```
@@ -153,14 +153,16 @@ Returns CLAUDE.md instruction files found along the path from vault root to the 
 ## Guide Operations (`src/tools/guideOperations.ts`)
 
 ### `get_obsidian_guide`
-Returns best-practice guides for working with the Obsidian vault. Call this before creating or searching notes if unsure about vault conventions, link syntax, frontmatter format, or which search tool to use.
+**IMPORTANT: Clients should call this tool with topic `conventions` at the start of every conversation before performing any vault operations.** This is the primary delivery mechanism for vault-specific CLAUDE.md instructions.
+
+Returns best-practice guides for working with the Obsidian vault, including the vault's root CLAUDE.md instructions (when topic is `conventions` or `all`).
 - **Input**: `{ topic: "conventions" | "create-note" | "search-strategy" | "all", note_type?: "daily" | "meeting" | "project" | "zettel" | "literature" }`
-- **Returns**: Guide content as markdown text
+- **Returns**: Guide content as markdown text. For `conventions` and `all`, the root CLAUDE.md is prepended (if it exists in the vault).
 - **Topics**:
-  - `conventions` — Vault link syntax, frontmatter, tags, callouts, best practices
+  - `conventions` — **Root CLAUDE.md (if present)** + vault link syntax, frontmatter, tags, callouts, best practices
   - `create-note` — Note template for the given `note_type` (default: zettel)
   - `search-strategy` — Which search tool to use when
-  - `all` — All guides concatenated
+  - `all` — **Root CLAUDE.md (if present)** + all guides concatenated
 
 ## MCP Prompts
 
@@ -168,8 +170,8 @@ Three prompts are registered for clients that support the MCP prompts capability
 
 | Prompt | Description | Arguments |
 |---|---|---|
-| `obsidian-conventions` | Vault conventions, link syntax, frontmatter, tags | none |
+| `obsidian-conventions` | Vault conventions, link syntax, frontmatter, tags — includes root CLAUDE.md if present | none |
 | `obsidian-create-note` | Template for a new note | `topic` (required), `note_type` (optional) |
 | `obsidian-search-strategy` | Which search tool to use when | none |
 
-Prompts return the same content as the `get_obsidian_guide` tool, reading from the same markdown source files in `prompts/`.
+Prompts return the same content as the `get_obsidian_guide` tool, reading from the same markdown source files in `prompts/`. The `obsidian-conventions` prompt also includes the root CLAUDE.md, matching the behavior of `get_obsidian_guide` with topic `conventions`.

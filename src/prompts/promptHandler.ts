@@ -2,15 +2,20 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { loadGuide, loadNoteTemplate } from "../guides/guideLoader.js";
+import { loadRootClaudeMd } from "../guides/claudeMdLoader.js";
 
 export function registerPrompts(server: McpServer, config: Config): void {
   server.registerPrompt(
     "obsidian-conventions",
     {
-      description: "Vault conventions, link syntax, frontmatter, tags",
+      description: "Vault conventions, link syntax, frontmatter, tags — includes root CLAUDE.md vault instructions if present",
     },
     async () => {
-      const content = await loadGuide(config.promptsDir, "conventions");
+      let content = await loadGuide(config.promptsDir, "conventions");
+      const rootClaudeMd = await loadRootClaudeMd(config.vaultPath);
+      if (rootClaudeMd) {
+        content = `--- Vault Instructions (CLAUDE.md) ---\n${rootClaudeMd}\n\n---\n\n${content}`;
+      }
       return {
         messages: [
           {
