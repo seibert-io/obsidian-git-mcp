@@ -147,6 +147,12 @@ describe("Integration: CLAUDE.md Discovery", () => {
       expect(instructions).toContain("get_claude_context");
     });
 
+    it("instructs client that root CLAUDE.md is already provided", () => {
+      const instructions = client.getInstructions();
+      expect(instructions).toContain("already been provided");
+      expect(instructions).toContain("do NOT read it again");
+    });
+
     it("lists get_claude_context in available tools", async () => {
       const result = await client.listTools();
       const toolNames = result.tools.map((t) => t.name);

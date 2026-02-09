@@ -8,6 +8,7 @@ import { resolveVaultPath } from "../utils/pathValidation.js";
 import { getLastSyncTimestamp } from "../git/gitSync.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
+import { HIDDEN_DIRECTORIES, HIDDEN_DIRECTORY_GLOBS } from "../utils/constants.js";
 
 async function countFiles(
   dirPath: string,
@@ -18,7 +19,7 @@ async function countFiles(
 
   const items = await readdir(dirPath, { withFileTypes: true });
   for (const item of items) {
-    if (item.name === ".git") continue;
+    if ((HIDDEN_DIRECTORIES as readonly string[]).includes(item.name)) continue;
 
     if (item.isDirectory()) {
       folders++;
@@ -40,7 +41,7 @@ async function countFiles(
 async function getTopLevelFolders(dirPath: string): Promise<string[]> {
   const items = await readdir(dirPath, { withFileTypes: true });
   return items
-    .filter((item) => item.isDirectory() && item.name !== ".git")
+    .filter((item) => item.isDirectory() && !(HIDDEN_DIRECTORIES as readonly string[]).includes(item.name))
     .map((item) => item.name);
 }
 
@@ -99,7 +100,7 @@ export function registerVaultOperations(server: McpServer, config: Config): void
         const files = await fg("**/*.md", {
           cwd: config.vaultPath,
           dot: false,
-          ignore: [".git/**"],
+          ignore: [...HIDDEN_DIRECTORY_GLOBS],
           followSymbolicLinks: false,
         });
 
@@ -158,7 +159,7 @@ export function registerVaultOperations(server: McpServer, config: Config): void
           const files = await fg("**/*.md", {
             cwd: config.vaultPath,
             dot: false,
-            ignore: [".git/**"],
+            ignore: [...HIDDEN_DIRECTORY_GLOBS],
             followSymbolicLinks: false,
           });
 

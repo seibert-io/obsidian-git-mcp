@@ -11,6 +11,7 @@ import { registerPrompts } from "./prompts/promptHandler.js";
 import { loadRootClaudeMd } from "./guides/claudeMdLoader.js";
 
 const CLAUDE_CONTEXT_HINT =
+  "The content of the root CLAUDE.md file (if it exists in the vault) has already been provided to you above as part of these server instructions — do NOT read it again via tools.\n\n" +
   "When working in a specific subdirectory of this vault, use the `get_claude_context` tool " +
   "with that directory path to discover additional CLAUDE.md instructions that may apply to that area.";
 

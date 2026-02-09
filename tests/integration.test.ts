@@ -36,6 +36,10 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     await mkdir(path.join(resolvedVault, "subfolder"), { recursive: true });
     await writeFile(path.join(resolvedVault, "subfolder", "nested.md"), "Nested note with [[hello]] link.\n");
 
+    // Create .claude directory that should be hidden from all listings/searches
+    await mkdir(path.join(resolvedVault, ".claude", "skills"), { recursive: true });
+    await writeFile(path.join(resolvedVault, ".claude", "skills", "test-skill.md"), "# Skill file\n");
+
     // Initialize git repo so commitAndPush works in write tests
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
@@ -206,6 +210,63 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     expect(text).toContain("Total files:");
     expect(text).toContain("Markdown files:");
+  });
+
+  it("excludes .claude directory from list_directory", async () => {
+    const result = await client.callTool({
+      name: "list_directory",
+      arguments: { path: "." },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).not.toContain(".claude");
+  });
+
+  it("excludes .claude directory from recursive list_directory", async () => {
+    const result = await client.callTool({
+      name: "list_directory",
+      arguments: { path: ".", recursive: true },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).not.toContain(".claude");
+    expect(text).not.toContain("test-skill");
+  });
+
+  it("excludes .claude files from search_files", async () => {
+    const result = await client.callTool({
+      name: "search_files",
+      arguments: { pattern: "**/*.md" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).not.toContain(".claude");
+    expect(text).not.toContain("test-skill");
+  });
+
+  it("excludes .claude files from grep", async () => {
+    const result = await client.callTool({
+      name: "grep",
+      arguments: { query: "Skill file" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).not.toContain(".claude");
+  });
+
+  it("excludes .claude files from find_files", async () => {
+    const result = await client.callTool({
+      name: "find_files",
+      arguments: { name: "**/*.md" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).not.toContain(".claude");
+    expect(text).not.toContain("test-skill");
+  });
+
+  it("excludes .claude from get_vault_info stats and folders", async () => {
+    const result = await client.callTool({
+      name: "get_vault_info",
+      arguments: {},
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).not.toContain(".claude");
   });
 
   it("returns error for path traversal attempt", async () => {

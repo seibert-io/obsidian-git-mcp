@@ -7,7 +7,7 @@ import type { Config } from "../config.js";
 import { resolveVaultPath } from "../utils/pathValidation.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
-import { MAX_FILE_SIZE } from "../utils/constants.js";
+import { MAX_FILE_SIZE, HIDDEN_DIRECTORY_GLOBS } from "../utils/constants.js";
 const MAX_REGEX_LENGTH = 500;
 const MAX_GREP_RESULTS = 500;
 const MAX_FIND_RESULTS = 500;
@@ -48,7 +48,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         const matches = await fg(pattern, {
           cwd: resolved,
           dot: false,
-          ignore: [".git/**"],
+          ignore: [...HIDDEN_DIRECTORY_GLOBS],
           followSymbolicLinks: false,
         });
         if (matches.length === 0) {
@@ -95,7 +95,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         const files = await fg(globPattern, {
           cwd: resolved,
           dot: false,
-          ignore: [".git/**"],
+          ignore: [...HIDDEN_DIRECTORY_GLOBS],
           onlyFiles: true,
           followSymbolicLinks: false,
         });
@@ -184,7 +184,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
         const files = await fg(globPattern, {
           cwd: resolved,
           dot: false,
-          ignore: [".git/**"],
+          ignore: [...HIDDEN_DIRECTORY_GLOBS],
           onlyFiles: true,
           stats: true,
           followSymbolicLinks: false,

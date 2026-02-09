@@ -2,6 +2,8 @@
 
 All tools operate within the vault directory boundary. Paths are relative to the vault root.
 
+**Hidden directories:** The `.git` and `.claude` directories are automatically excluded from all listings, searches, file counts, and vault statistics. This is controlled by the `HIDDEN_DIRECTORIES` constant in `src/utils/constants.ts`.
+
 ## File Operations (`src/tools/fileOperations.ts`)
 
 ### `read_file`

@@ -38,6 +38,10 @@ All file paths are validated by `resolveVaultPath()` (sync) and `resolveVaultPat
 - `.gitmodules`, `.gitattributes`, etc. at vault root — rejected
 - Symlinks that escape the vault — rejected by `resolveVaultPathSafe()`
 
+### Hidden Directories
+
+The `.git` and `.claude` directories are excluded from all tool results (listings, searches, file counts, vault stats). This prevents internal metadata from leaking into client-visible output. The list is centrally defined in `HIDDEN_DIRECTORIES` (`src/utils/constants.ts`). Note that this is a visibility filter, not a security boundary — direct file access via `read_file` is still governed by path validation rules above.
+
 ### Error Handling
 
 Path validation errors throw `PathValidationError`, which tool handlers catch and return as structured error responses (never crashes the server).

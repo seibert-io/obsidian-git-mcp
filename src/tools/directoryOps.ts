@@ -6,6 +6,7 @@ import type { Config } from "../config.js";
 import { resolveVaultPathSafe } from "../utils/pathValidation.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
+import { HIDDEN_DIRECTORIES } from "../utils/constants.js";
 
 interface DirEntry {
   name: string;
@@ -22,8 +23,7 @@ async function listRecursive(
   const items = await readdir(dirPath, { withFileTypes: true });
 
   for (const item of items) {
-    // Skip .git directory
-    if (item.name === ".git") continue;
+    if ((HIDDEN_DIRECTORIES as readonly string[]).includes(item.name)) continue;
 
     const relativePath = path.relative(vaultPath, path.join(dirPath, item.name));
 
@@ -72,7 +72,7 @@ export function registerDirectoryOps(server: McpServer, config: Config): void {
         } else {
           const items = await readdir(resolved, { withFileTypes: true });
           entries = items
-            .filter((item) => item.name !== ".git")
+            .filter((item) => !(HIDDEN_DIRECTORIES as readonly string[]).includes(item.name))
             .map((item) => ({
               name: item.isDirectory()
                 ? path.relative(config.vaultPath, path.join(resolved, item.name)) + "/"
