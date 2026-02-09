@@ -8,7 +8,6 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
-  id-token: write
 
 jobs:
   release:
@@ -26,6 +25,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm audit signatures
+      - run: npm run lint
       - run: npm run build
       - run: npm test
       - name: Release
