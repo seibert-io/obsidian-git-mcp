@@ -37,6 +37,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error("Fatal error:", error);
+  logger.error("Fatal error", {
+    error: error instanceof Error ? error.message : String(error),
+  });
   process.exit(1);
 });

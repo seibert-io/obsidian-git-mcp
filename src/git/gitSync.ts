@@ -28,6 +28,34 @@ export function sanitizeCommitMessage(message: string): string {
     : cleaned;
 }
 
+/**
+ * Application secrets that must never be passed to git child processes.
+ * Git hooks or malicious remotes could exfiltrate environment variables,
+ * so we strip all application secrets before spawning git.
+ */
+const SECRETS_TO_STRIP = [
+  "JWT_SECRET",
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
+  "ALLOWED_GITHUB_USERS",
+  "GIT_REPO_URL",
+] as const;
+
+/**
+ * Create an environment for git child processes with application secrets removed.
+ *
+ * Uses a denylist approach: inherits the full process.env (so git gets all
+ * variables it may need — PATH, HOME, HTTP_PROXY, GIT_SSH_COMMAND, etc.)
+ * but explicitly strips application secrets that git does not need.
+ */
+export function buildGitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
+  for (const key of SECRETS_TO_STRIP) {
+    delete env[key];
+  }
+  return env;
+}
+
 /** Execute a git command with timeout and sanitized error messages. */
 export function git(
   args: string[],
@@ -37,7 +65,7 @@ export function git(
     execFile(
       "git",
       args,
-      { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER },
+      { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: buildGitEnv() },
       (error, stdout, stderr) => {
         if (error) {
           reject(
