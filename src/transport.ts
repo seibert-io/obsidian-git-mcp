@@ -15,7 +15,6 @@ import { RateLimiter } from "./utils/rateLimiter.js";
 import { logger } from "./utils/logger.js";
 import type { Config } from "./config.js";
 
-const MAX_SESSIONS = 100;
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 interface SessionEntry {
@@ -115,8 +114,8 @@ export async function startHttpServer(
     }
 
     // Enforce session limit
-    if (sessions.size >= MAX_SESSIONS) {
-      logger.warn("Session limit reached", { current: sessions.size, max: MAX_SESSIONS });
+    if (sessions.size >= config.maxSessions) {
+      logger.warn("Session limit reached", { current: sessions.size, max: config.maxSessions });
       res.status(503).json({ error: "Too many active sessions" });
       return;
     }

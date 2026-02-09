@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { logger } from "../utils/logger.js";
 
 const MAX_AUTH_CODES = 1000;
 const MAX_REFRESH_TOKENS = 2000;
@@ -110,7 +111,10 @@ export class OAuthStore {
     // Evict oldest entry if at capacity
     if (this.authCodes.size >= MAX_AUTH_CODES) {
       const oldestKey = this.authCodes.keys().next().value;
-      if (oldestKey) this.authCodes.delete(oldestKey);
+      if (oldestKey) {
+        this.authCodes.delete(oldestKey);
+        logger.debug("Auth code evicted due to capacity", { maxAuthCodes: MAX_AUTH_CODES });
+      }
     }
     const code = crypto.randomBytes(32).toString("hex");
     this.authCodes.set(code, {
@@ -138,7 +142,10 @@ export class OAuthStore {
     // Evict oldest entry if at capacity
     if (this.refreshTokens.size >= MAX_REFRESH_TOKENS) {
       const oldestKey = this.refreshTokens.keys().next().value;
-      if (oldestKey) this.refreshTokens.delete(oldestKey);
+      if (oldestKey) {
+        this.refreshTokens.delete(oldestKey);
+        logger.debug("Refresh token evicted due to capacity", { maxRefreshTokens: MAX_REFRESH_TOKENS });
+      }
     }
     const token = crypto.randomBytes(32).toString("hex");
     this.refreshTokens.set(token, {
@@ -173,6 +180,7 @@ export class OAuthStore {
       for (const [id, client] of this.clients) {
         if (now - client.registeredAt > CLIENT_STALENESS_MS) {
           this.clients.delete(id);
+          logger.debug("Stale client evicted during cleanup", { clientId: id });
         }
       }
     }

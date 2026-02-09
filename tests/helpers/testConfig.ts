@@ -20,6 +20,7 @@ export function createTestConfig(overrides: Partial<Config> = {}): Config {
     githubClientSecret: "test-github-client-secret",
     allowedGithubUsers: ["alloweduser"],
     trustProxy: false,
+    maxSessions: 100,
     promptsDir: "prompts",
     ...overrides,
   };

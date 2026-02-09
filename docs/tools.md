@@ -4,23 +4,43 @@ All tools operate within the vault directory boundary. Paths are relative to the
 
 **Hidden directories:** The `.git` and `.claude` directories are automatically excluded from all listings, searches, file counts, and vault statistics. This is controlled by the `HIDDEN_DIRECTORIES` constant in `src/utils/constants.ts`.
 
+## Batch Operations
+
+Several tools support batch operations for processing multiple items in a single call. Batch support is implemented via `src/utils/batchUtils.ts`.
+
+**General rules:**
+- **Max batch size:** 10 items per call (`MAX_BATCH_SIZE`)
+- **Backward compatible:** When a single item is provided (via the original parameters), the tool behaves exactly as before — no batch headers, no format change
+- **Batch result format:** Each result is separated by a header line: `--- [N/total] path ---` followed by the result content. Failed items show `ERROR:` prefix in their content
+- **Partial failure:** Individual items can fail without aborting the batch. Each result reports success/failure independently
+- **Execution mode:** Read-only operations run in parallel (`Promise.all`). Write operations run sequentially with a single git commit at the end
+
 ## File Operations (`src/tools/fileOperations.ts`)
 
 ### `read_file`
-Read a single file's content.
-- **Input**: `{ path: string }`
-- **Returns**: File content as text
+Read file content from the vault. Supports batch reads.
+- **Input (single)**: `{ path: string }`
+- **Input (batch)**: `{ paths: string[] }` — max 10 paths
+- **Batch execution**: Parallel
+- **Returns (single)**: File content as text
+- **Returns (batch)**: Batch-formatted results with headers per file
 
 ### `write_file`
-Create or overwrite a file. Auto-creates parent directories. Triggers git commit+push.
-- **Input**: `{ path: string, content: string }`
-- **Returns**: Confirmation message
+Create or overwrite files in the vault. Auto-creates parent directories. Triggers git commit+push. Supports batch writes.
+- **Input (single)**: `{ path: string, content: string }`
+- **Input (batch)**: `{ files: Array<{ path: string, content: string }> }` — max 10 files
+- **Batch execution**: Sequential writes, single git commit at the end
+- **Returns (single)**: Confirmation message
+- **Returns (batch)**: Batch-formatted results with headers per file
 
 ### `edit_file`
-Find-and-replace in a file. The `old_text` must match exactly once.
-- **Input**: `{ path: string, old_text: string, new_text: string }`
-- **Returns**: Confirmation message
-- **Errors**: If `old_text` is not found or matches more than once
+Find-and-replace in files. The `old_text` must match exactly once per file. Supports batch edits.
+- **Input (single)**: `{ path: string, old_text: string, new_text: string }`
+- **Input (batch)**: `{ edits: Array<{ path: string, old_text: string, new_text: string }> }` — max 10 edits
+- **Batch execution**: Sequential edits, single git commit at the end
+- **Returns (single)**: Confirmation message
+- **Returns (batch)**: Batch-formatted results with headers per file
+- **Errors**: If `old_text` is not found or matches more than once (per file; does not abort batch)
 
 ### `delete_file`
 Delete a file. Triggers git commit+push.
@@ -35,9 +55,12 @@ Move or rename a file. Triggers git commit+push.
 ## Directory Operations (`src/tools/directoryOps.ts`)
 
 ### `list_directory`
-List files and directories at a path.
-- **Input**: `{ path: string, recursive?: boolean, max_depth?: number }`
-- **Returns**: Formatted listing with `[file]` / `[directory]` type indicators
+List files and directories at vault paths. Supports batch listing.
+- **Input (single)**: `{ path: string, recursive?: boolean, max_depth?: number }`
+- **Input (batch)**: `{ paths: string[], recursive?: boolean, max_depth?: number }` — max 10 paths. `recursive` and `max_depth` apply to all paths in the batch
+- **Batch execution**: Parallel
+- **Returns (single)**: Formatted listing with `[file]` / `[directory]` type indicators
+- **Returns (batch)**: Batch-formatted results with headers per directory
 
 ### `create_directory`
 Create a directory including parent directories.
@@ -47,9 +70,12 @@ Create a directory including parent directories.
 ## Search Operations (`src/tools/searchOperations.ts`)
 
 ### `search_files`
-Find files by glob pattern.
-- **Input**: `{ pattern: string, path?: string }`
-- **Returns**: Newline-separated list of matching file paths
+Find files by name pattern (glob). Supports batch searches.
+- **Input (single)**: `{ pattern: string, path?: string }`
+- **Input (batch)**: `{ searches: Array<{ pattern: string, path?: string }> }` — max 10 searches
+- **Batch execution**: Parallel
+- **Returns (single)**: Newline-separated list of matching file paths
+- **Returns (batch)**: Batch-formatted results with headers per search
 
 ### `grep`
 Search file contents by text or regex.
@@ -58,9 +84,12 @@ Search file contents by text or regex.
 - **Limit**: 500 results max
 
 ### `find_files`
-Advanced file finder with filters.
-- **Input**: `{ path?: string, name?: string, modified_after?: string, modified_before?: string, size_min?: number, size_max?: number }`
-- **Returns**: File paths with size and modification timestamps
+Advanced file finder with filters. Supports batch queries.
+- **Input (single)**: `{ path?: string, name?: string, modified_after?: string, modified_before?: string, size_min?: number, size_max?: number }`
+- **Input (batch)**: `{ queries: Array<{ path?: string, name?: string, modified_after?: string, modified_before?: string, size_min?: number, size_max?: number }> }` — max 10 queries
+- **Batch execution**: Parallel
+- **Returns (single)**: File paths with size and modification timestamps
+- **Returns (batch)**: Batch-formatted results with headers per query
 
 ## Vault Operations (`src/tools/vaultOperations.ts`)
 

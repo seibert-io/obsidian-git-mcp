@@ -4,6 +4,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { resolveVaultPathSafe } from "../utils/pathValidation.js";
+import { validateBatchSize, formatBatchResults, MAX_BATCH_SIZE } from "../utils/batchUtils.js";
+import type { BatchResult } from "../utils/batchUtils.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
 import { isHiddenDirectory } from "../utils/constants.js";
@@ -46,50 +48,92 @@ async function listRecursive(
   return entries;
 }
 
+async function listDirectoryEntries(
+  resolved: string,
+  vaultPath: string,
+  recursive: boolean,
+  maxDepth: number,
+): Promise<DirEntry[]> {
+  if (recursive) {
+    return listRecursive(resolved, vaultPath, 1, maxDepth);
+  }
+
+  const items = await readdir(resolved, { withFileTypes: true });
+  return items
+    .filter((item) => !isHiddenDirectory(item.name))
+    .map((item) => ({
+      name: item.isDirectory()
+        ? path.relative(vaultPath, path.join(resolved, item.name)) + "/"
+        : path.relative(vaultPath, path.join(resolved, item.name)),
+      type: item.isDirectory() ? ("directory" as const) : ("file" as const),
+    }));
+}
+
+function formatEntries(entries: readonly DirEntry[]): string {
+  return entries
+    .map((e) => `[${e.type}] ${e.name}`)
+    .join("\n");
+}
+
 export function registerDirectoryOps(server: McpServer, config: Config): void {
   // list_directory
   server.registerTool(
     "list_directory",
     {
-      description: "List files and directories in a vault path",
+      description: "List files and directories in vault paths. Supports batch listing via 'paths' array (max 10).",
       inputSchema: {
-        path: z.string().default(".").describe("Path relative to vault root"),
+        path: z.string().default(".").optional().describe("Path relative to vault root (single directory)"),
+        paths: z.array(z.string()).max(MAX_BATCH_SIZE).optional().describe("Multiple paths for batch listing (max 10)"),
         recursive: z.boolean().default(false).describe("List recursively"),
         max_depth: z.number().int().min(1).default(5).describe("Maximum depth for recursive listing"),
       },
     },
-    async ({ path: dirPath, recursive, max_depth }) => {
-      try {
-        const resolved = await resolveVaultPathSafe(config.vaultPath, dirPath);
-        const s = await stat(resolved);
-        if (!s.isDirectory()) {
-          return toolError(`Not a directory: ${dirPath}`);
-        }
+    async ({ path: singlePath, paths, recursive, max_depth }) => {
+      const dirPaths = paths ?? [singlePath ?? "."];
 
-        let entries: DirEntry[];
-        if (recursive) {
-          entries = await listRecursive(resolved, config.vaultPath, 1, max_depth);
-        } else {
-          const items = await readdir(resolved, { withFileTypes: true });
-          entries = items
-            .filter((item) => !isHiddenDirectory(item.name))
-            .map((item) => ({
-              name: item.isDirectory()
-                ? path.relative(config.vaultPath, path.join(resolved, item.name)) + "/"
-                : path.relative(config.vaultPath, path.join(resolved, item.name)),
-              type: item.isDirectory() ? ("directory" as const) : ("file" as const),
-            }));
-        }
+      const sizeError = validateBatchSize(dirPaths.length);
+      if (sizeError) return toolError(sizeError);
 
-        const formatted = entries
-          .map((e) => `[${e.type}] ${e.name}`)
-          .join("\n");
-        return toolSuccess(formatted || "(empty directory)");
-      } catch (error) {
-        const msg = getErrorMessage(error);
-        logger.error("list_directory failed", { path: dirPath, error: msg });
-        return toolError(`Failed to list directory: ${msg}`);
+      // Single directory: original behavior (backward compatible)
+      if (dirPaths.length === 1) {
+        const dirPath = dirPaths[0];
+        try {
+          const resolved = await resolveVaultPathSafe(config.vaultPath, dirPath);
+          const s = await stat(resolved);
+          if (!s.isDirectory()) {
+            return toolError(`Not a directory: ${dirPath}`);
+          }
+
+          const entries = await listDirectoryEntries(resolved, config.vaultPath, recursive, max_depth);
+          const formatted = formatEntries(entries);
+          return toolSuccess(formatted || "(empty directory)");
+        } catch (error) {
+          const msg = getErrorMessage(error);
+          logger.error("list_directory failed", { path: dirPath, error: msg });
+          return toolError(`Failed to list directory: ${msg}`);
+        }
       }
+
+      // Batch: list all directories in parallel
+      const results = await Promise.all(
+        dirPaths.map(async (dirPath, index): Promise<BatchResult> => {
+          try {
+            const resolved = await resolveVaultPathSafe(config.vaultPath, dirPath);
+            const s = await stat(resolved);
+            if (!s.isDirectory()) {
+              return { index, path: dirPath, success: false, content: `Not a directory: ${dirPath}` };
+            }
+
+            const entries = await listDirectoryEntries(resolved, config.vaultPath, recursive, max_depth);
+            const formatted = formatEntries(entries);
+            return { index, path: dirPath, success: true, content: formatted || "(empty directory)" };
+          } catch (error) {
+            return { index, path: dirPath, success: false, content: getErrorMessage(error) };
+          }
+        }),
+      );
+
+      return toolSuccess(formatBatchResults(results));
     },
   );
 

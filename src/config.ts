@@ -1,5 +1,9 @@
 import path from "node:path";
 
+function containsControlCharacters(value: string): boolean {
+  return /[\x00-\x1f\x7f]/.test(value);
+}
+
 export interface Config {
   gitRepoUrl: string;
   gitBranch: string;
@@ -19,6 +23,7 @@ export interface Config {
   githubClientSecret: string;
   allowedGithubUsers: string[];
   trustProxy: boolean;
+  maxSessions: number;
   promptsDir: string;
 }
 
@@ -27,20 +32,32 @@ export function loadConfig(): Config {
   if (!gitRepoUrl) {
     throw new Error("GIT_REPO_URL environment variable is required");
   }
+  if (containsControlCharacters(gitRepoUrl)) {
+    throw new Error("GIT_REPO_URL must not contain control characters");
+  }
 
   const gitBranch = process.env.GIT_BRANCH ?? "main";
   if (gitBranch.startsWith("-")) {
     throw new Error("GIT_BRANCH must not start with a hyphen");
+  }
+  if (containsControlCharacters(gitBranch)) {
+    throw new Error("GIT_BRANCH must not contain control characters");
   }
 
   const gitUserName = process.env.GIT_USER_NAME ?? "Claude MCP";
   if (gitUserName.startsWith("-")) {
     throw new Error("GIT_USER_NAME must not start with a hyphen");
   }
+  if (containsControlCharacters(gitUserName)) {
+    throw new Error("GIT_USER_NAME must not contain control characters");
+  }
 
   const gitUserEmail = process.env.GIT_USER_EMAIL ?? "mcp@example.com";
   if (gitUserEmail.startsWith("-")) {
     throw new Error("GIT_USER_EMAIL must not start with a hyphen");
+  }
+  if (containsControlCharacters(gitUserEmail)) {
+    throw new Error("GIT_USER_EMAIL must not contain control characters");
   }
 
   const syncInterval = parseInt(
@@ -111,6 +128,11 @@ export function loadConfig(): Config {
 
   const trustProxy = (process.env.TRUST_PROXY ?? "false").toLowerCase() === "true";
 
+  const maxSessions = parseInt(process.env.MAX_SESSIONS ?? "100", 10);
+  if (isNaN(maxSessions) || maxSessions < 1) {
+    throw new Error("MAX_SESSIONS must be a positive number");
+  }
+
   return {
     gitRepoUrl,
     gitBranch,
@@ -128,6 +150,7 @@ export function loadConfig(): Config {
     githubClientSecret,
     allowedGithubUsers,
     trustProxy,
+    maxSessions,
     promptsDir: process.env.PROMPTS_DIR ?? path.join(process.cwd(), "prompts"),
   };
 }

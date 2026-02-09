@@ -1,6 +1,9 @@
 /** Maximum file size for read/write/search operations (10 MB). */
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+/** Default cap for rate limiter entries to prevent unbounded memory growth. */
+export const DEFAULT_MAX_RATE_LIMIT_ENTRIES = 10_000;
+
 /** Directory names excluded from all listings, searches, and vault stats. */
 export const HIDDEN_DIRECTORIES: readonly string[] = [".git", ".claude"];
 

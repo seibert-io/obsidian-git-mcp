@@ -6,6 +6,7 @@ import { logger } from "../utils/logger.js";
 
 const GIT_TIMEOUT_MS = 30_000;
 const GIT_MAX_BUFFER = 2 * 1024 * 1024; // 2 MiB
+const MAX_COMMIT_MESSAGE_LENGTH = 200;
 
 let lastSyncTimestamp: Date | null = null;
 let syncIntervalHandle: ReturnType<typeof setInterval> | null = null;
@@ -17,6 +18,14 @@ export function getLastSyncTimestamp(): Date | null {
 /** Redact credentials from URLs in error messages. */
 function sanitizeError(message: string): string {
   return message.replace(/https?:\/\/[^@]+@/g, "https://***@");
+}
+
+/** Strip control characters and truncate commit messages to prevent injection. */
+export function sanitizeCommitMessage(message: string): string {
+  const cleaned = message.replace(/[\x00-\x1f\x7f]/g, " ");
+  return cleaned.length > MAX_COMMIT_MESSAGE_LENGTH
+    ? cleaned.slice(0, MAX_COMMIT_MESSAGE_LENGTH)
+    : cleaned;
 }
 
 /** Execute a git command with timeout and sanitized error messages. */
@@ -127,20 +136,14 @@ export async function pullVault(config: Config): Promise<void> {
 }
 
 /**
- * Commit and push changes after a write operation.
+ * Stage all changes, commit with the given message, rebase-pull, and push.
+ * Shared implementation for single and batch commits.
  */
-export async function commitAndPush(
-  config: Config,
-  message: string,
-): Promise<void> {
+async function stageCommitAndPush(config: Config, message: string): Promise<void> {
   const cwd = config.vaultPath;
 
-  logger.debug("Committing and pushing changes", { message });
-
-  // Stage all changes
   await git(["add", "."], cwd);
 
-  // Check if there's anything to commit
   try {
     const { stdout } = await git(["status", "--porcelain"], cwd);
     if (!stdout.trim()) {
@@ -151,10 +154,8 @@ export async function commitAndPush(
     // proceed with commit attempt
   }
 
-  // Commit
-  await git(["commit", "-m", message], cwd);
+  await git(["commit", "-m", sanitizeCommitMessage(message)], cwd);
 
-  // Pull before push to handle any remote changes
   try {
     await git(["pull", "--rebase", "origin", "--", config.gitBranch], cwd);
   } catch (error) {
@@ -163,11 +164,33 @@ export async function commitAndPush(
     });
   }
 
-  // Push
   await git(["push", "origin", "--", config.gitBranch], cwd);
-
   lastSyncTimestamp = new Date();
+}
+
+/**
+ * Commit and push changes after a single write operation.
+ */
+export async function commitAndPush(
+  config: Config,
+  message: string,
+): Promise<void> {
+  logger.debug("Committing and pushing changes", { message });
+  await stageCommitAndPush(config, message);
   logger.info("Changes committed and pushed", { message });
+}
+
+/**
+ * Commit and push changes for a batch of file operations.
+ * Uses a single commit for all changes instead of one per file.
+ */
+export async function commitAndPushBatch(
+  config: Config,
+  paths: readonly string[],
+): Promise<void> {
+  logger.debug("Committing batch changes", { fileCount: paths.length });
+  await stageCommitAndPush(config, `MCP: batch update ${paths.length} files`);
+  logger.info("Batch changes committed and pushed", { fileCount: paths.length });
 }
 
 /**

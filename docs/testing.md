@@ -32,6 +32,7 @@ End-to-end test that starts a real MCP server over Streamable HTTP:
 - Starts an Express server with `StreamableHTTPServerTransport`
 - Connects an MCP client to the server
 - Tests all tools: listing, reading, searching, grep, backlinks, tags, vault info, guides
+- Tests batch operations: batch `read_file` (multiple paths), batch `list_directory`, batch `search_files`, batch `find_files`, batch `write_file`, batch `edit_file` — verifying parallel/sequential execution, batch result formatting, and partial failure handling
 - Verifies path traversal is rejected at the tool level
 
 ### OAuth (`tests/oauth.test.ts`)
@@ -146,6 +147,57 @@ Tests for the vault guide tool and MCP prompts:
 - Prompt `obsidian-search-strategy` returns correct content
 - Prompt `obsidian-create-note` with topic returns template with replaced variables
 - Custom prompts via volume mount override defaults
+
+### Rate Limiter (`tests/rateLimiter.test.ts`)
+
+Unit tests for the `RateLimiter` class:
+- Allows requests under the rate limit
+- Blocks requests exceeding the rate limit
+- Resets counts after the time window expires
+- Removes expired entries on cleanup
+- Evicts oldest entry (FIFO) when `maxEntries` capacity is reached
+- Allows new keys to work after eviction
+- Does not evict when under capacity
+- Uses default `maxEntries` when not specified
+
+### Config Validation (`tests/config.test.ts`)
+
+Unit tests for `loadConfig()` environment variable validation:
+- Rejects `GIT_BRANCH`, `GIT_USER_NAME`, `GIT_USER_EMAIL` containing control characters (newline, carriage return, null byte)
+- Accepts valid branch names with hyphens and slashes
+- Accepts valid user names with spaces and emails with standard characters
+- Rejects values starting with hyphen (existing regression tests)
+- Uses default `maxSessions` of 100
+- Accepts custom `MAX_SESSIONS` value
+- Rejects non-positive and non-numeric `MAX_SESSIONS`
+
+### Error Sanitization (`tests/toolResponse.test.ts`)
+
+Unit tests for `sanitizeErrorForClient()` and `toolError()`:
+- Removes absolute paths starting with `/vault/`, `/tmp/`, `/home/` (preserves filename)
+- Replaces 40-character git hashes with `<hash>`
+- Replaces git refs (`refs/heads/...`) with `<ref>`
+- Truncates messages exceeding 500 characters
+- Leaves short non-sensitive messages unchanged
+- Handles combined sanitization (path + hash in same message)
+- `toolError()` applies sanitization automatically
+
+### Commit Message Sanitization (`tests/gitSync.test.ts`)
+
+Unit tests for `sanitizeCommitMessage()`:
+- Removes newline, carriage return, and null byte characters (replaced with spaces)
+- Replaces all ASCII control characters with spaces
+- Truncates messages exceeding 200 characters
+- Does not truncate messages at or below 200 characters
+- Leaves normal messages unchanged
+
+### Batch Utilities (`tests/batchUtils.test.ts`)
+
+Unit tests for batch operation helpers (`validateBatchSize`, `formatBatchResults`):
+- Validates batch sizes (accepts 1 to max, rejects 0 and above max)
+- Formats successful results with `--- [N/total] path ---` headers
+- Formats error results with `ERROR:` prefix
+- Handles single-result batches correctly
 
 ### CLAUDE.md Discovery (`tests/claudeMd.test.ts`)
 

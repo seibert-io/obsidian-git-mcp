@@ -1,34 +1,29 @@
-# Development: Direkter Zugriff ohne HTTPS
-# Für Production mit HTTPS: docker compose -f docker-compose.prod.yml up -d
 services:
-  obsidian-mcp:
-    build: .
+  caddy:
+    image: caddy:2-alpine
     ports:
-      - "3000:3000"
+      - "80:80"
+      - "443:443"
     environment:
-      # Required
-      - GIT_REPO_URL=https://github.com/user/obsidian-vault.git
-      # Required — GitHub OAuth
-      - GITHUB_CLIENT_ID=your-github-oauth-app-client-id
-      - GITHUB_CLIENT_SECRET=your-github-oauth-app-client-secret
-      - ALLOWED_GITHUB_USERS=your-github-username
-      # Required — OAuth 2.1
-      - JWT_SECRET=your-jwt-secret-minimum-32-characters-long
-      - SERVER_URL=https://your-server.example.com
-      # Optional — OAuth 2.1
-      - ACCESS_TOKEN_EXPIRY_SECONDS=3600
-      - REFRESH_TOKEN_EXPIRY_SECONDS=604800
-      # Optional — Git
-      - GIT_BRANCH=main
-      - GIT_SYNC_INTERVAL_SECONDS=300
-      - GIT_USER_NAME=Claude MCP
-      - GIT_USER_EMAIL=mcp@example.com
-      # Optional — Server
-      - VAULT_PATH=/vault
-      - PORT=3000
-      - LOG_LEVEL=info
-    # Uncomment the following to customize:
-    # volumes:
-    #   - /path/to/local/vault:/vault              # Mount local vault
-    #   - ./custom-prompts:/app/prompts             # Custom vault conventions/templates
+      - SERVER_DOMAIN=${SERVER_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - mcp
     restart: unless-stopped
+
+  mcp:
+    build: .
+    expose:
+      - "3000"
+    environment:
+      - SERVER_URL=https://${SERVER_DOMAIN}
+      - TRUST_PROXY=true
+    env_file: .env
+    restart: unless-stopped
+
+volumes:
+  caddy_data:    # Certificates + ACME state — MUST be persisted
+  caddy_config:  # Caddy runtime config

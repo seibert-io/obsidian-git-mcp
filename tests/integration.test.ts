@@ -40,16 +40,21 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     await mkdir(path.join(resolvedVault, ".claude", "skills"), { recursive: true });
     await writeFile(path.join(resolvedVault, ".claude", "skills", "test-skill.md"), "# Skill file\n");
 
-    // Initialize git repo so commitAndPush works in write tests
+    // Initialize git repo with a local bare remote so commitAndPush works in write tests
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
     const execFileAsync = promisify(execFile);
-    await execFileAsync("git", ["init"], { cwd: resolvedVault });
+    await execFileAsync("git", ["init", "--initial-branch", "main"], { cwd: resolvedVault });
     await execFileAsync("git", ["config", "user.name", "Test"], { cwd: resolvedVault });
     await execFileAsync("git", ["config", "user.email", "test@test.com"], { cwd: resolvedVault });
     await execFileAsync("git", ["config", "commit.gpgsign", "false"], { cwd: resolvedVault });
     await execFileAsync("git", ["add", "."], { cwd: resolvedVault });
     await execFileAsync("git", ["commit", "-m", "init"], { cwd: resolvedVault });
+
+    // Create a bare repo as a local "remote" so git push/pull succeed
+    const bareRepoPath = resolvedVault + "-bare.git";
+    await execFileAsync("git", ["clone", "--bare", resolvedVault, bareRepoPath]);
+    await execFileAsync("git", ["remote", "add", "origin", bareRepoPath], { cwd: resolvedVault });
 
     // Factory creates a fresh McpServer per session (mirrors production pattern)
     const createMcpServer = () => {
@@ -125,6 +130,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     await client?.close();
     httpServer?.close();
     await rm(TEST_VAULT, { recursive: true, force: true });
+    await rm(TEST_VAULT + "-bare.git", { recursive: true, force: true });
   });
 
   it("lists available tools", async () => {
@@ -299,5 +305,197 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     expect(secondResult.tools.map(t => t.name)).toContain("read_file");
 
     await secondClient.close();
+  });
+
+  // --- Batch list_directory tests ---
+
+  it("batch lists multiple directories via paths array", async () => {
+    const result = await client.callTool({
+      name: "list_directory",
+      arguments: { paths: [".", "subfolder"] },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("--- [1/2] . ---");
+    expect(text).toContain("hello.md");
+    expect(text).toContain("subfolder/");
+    expect(text).toContain("--- [2/2] subfolder ---");
+    expect(text).toContain("subfolder/nested.md");
+  });
+
+  it("batch list_directory handles partial failure", async () => {
+    const result = await client.callTool({
+      name: "list_directory",
+      arguments: { paths: [".", "nonexistent-dir"] },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("--- [1/2] . ---");
+    expect(text).toContain("hello.md");
+    expect(text).toContain("--- [2/2] nonexistent-dir ---");
+    expect(text).toContain("ERROR:");
+  });
+
+  it("batch list_directory rejects empty batch", async () => {
+    const result = await client.callTool({
+      name: "list_directory",
+      arguments: { paths: [] },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it("batch list_directory with recursive option", async () => {
+    const result = await client.callTool({
+      name: "list_directory",
+      arguments: { paths: [".", "subfolder"], recursive: true },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("--- [1/2] . ---");
+    expect(text).toContain("subfolder/nested.md");
+    expect(text).toContain("--- [2/2] subfolder ---");
+  });
+
+  it("batch list_directory excludes .claude directory", async () => {
+    const result = await client.callTool({
+      name: "list_directory",
+      arguments: { paths: [".", "subfolder"] },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).not.toContain(".claude");
+  });
+
+  it("single path via path param preserves backward compatibility", async () => {
+    const result = await client.callTool({
+      name: "list_directory",
+      arguments: { path: "subfolder" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("subfolder/nested.md");
+    // Single-path mode should NOT use batch format
+    expect(text).not.toContain("---");
+  });
+
+  it("list_directory defaults to vault root when no path or paths given", async () => {
+    const result = await client.callTool({
+      name: "list_directory",
+      arguments: {},
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("hello.md");
+    expect(text).toContain("subfolder/");
+  });
+
+  it("batch list_directory reports not-a-directory error for file paths", async () => {
+    const result = await client.callTool({
+      name: "list_directory",
+      arguments: { paths: ["hello.md"] },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("Not a directory");
+  });
+
+  // --- Batch read_file tests ---
+
+  it("batch reads multiple files via paths array", async () => {
+    const result = await client.callTool({
+      name: "read_file",
+      arguments: { paths: ["hello.md", "subfolder/nested.md"] },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("--- [1/2] hello.md ---");
+    expect(text).toContain("# Hello World");
+    expect(text).toContain("--- [2/2] subfolder/nested.md ---");
+    expect(text).toContain("Nested note");
+  });
+
+  it("batch read handles partial failure", async () => {
+    const result = await client.callTool({
+      name: "read_file",
+      arguments: { paths: ["hello.md", "nonexistent.md"] },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("--- [1/2] hello.md ---");
+    expect(text).toContain("# Hello World");
+    expect(text).toContain("--- [2/2] nonexistent.md ---");
+    expect(text).toContain("ERROR:");
+  });
+
+  it("batch read rejects empty batch", async () => {
+    const result = await client.callTool({
+      name: "read_file",
+      arguments: { paths: [] },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  // --- Batch write_file tests ---
+
+  it("batch writes multiple files with single git commit", async () => {
+    const result = await client.callTool({
+      name: "write_file",
+      arguments: {
+        files: [
+          { path: "batch1.md", content: "Batch file 1" },
+          { path: "batch2.md", content: "Batch file 2" },
+        ],
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("--- [1/2] batch1.md ---");
+    expect(text).toContain("File written: batch1.md");
+    expect(text).toContain("--- [2/2] batch2.md ---");
+    expect(text).toContain("File written: batch2.md");
+
+    // Verify files were actually written
+    const read1 = await client.callTool({ name: "read_file", arguments: { path: "batch1.md" } });
+    expect((read1.content as Array<{ type: string; text: string }>)[0].text).toBe("Batch file 1");
+  });
+
+  // --- Batch edit_file tests ---
+
+  it("batch edits multiple files with single git commit", async () => {
+    // Setup: write two files first
+    await client.callTool({
+      name: "write_file",
+      arguments: { files: [
+        { path: "edit-batch1.md", content: "Original text A" },
+        { path: "edit-batch2.md", content: "Original text B" },
+      ]},
+    });
+
+    const result = await client.callTool({
+      name: "edit_file",
+      arguments: {
+        edits: [
+          { path: "edit-batch1.md", old_text: "Original text A", new_text: "Modified text A" },
+          { path: "edit-batch2.md", old_text: "Original text B", new_text: "Modified text B" },
+        ],
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("File edited: edit-batch1.md");
+    expect(text).toContain("File edited: edit-batch2.md");
+
+    // Verify edits
+    const read1 = await client.callTool({ name: "read_file", arguments: { path: "edit-batch1.md" } });
+    expect((read1.content as Array<{ type: string; text: string }>)[0].text).toBe("Modified text A");
+  });
+
+  it("batch edit handles partial failure", async () => {
+    await client.callTool({
+      name: "write_file",
+      arguments: { path: "edit-partial.md", content: "Some content" },
+    });
+
+    const result = await client.callTool({
+      name: "edit_file",
+      arguments: {
+        edits: [
+          { path: "edit-partial.md", old_text: "Some content", new_text: "New content" },
+          { path: "edit-partial.md", old_text: "Does not exist", new_text: "Replacement" },
+        ],
+      },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("File edited: edit-partial.md");
+    expect(text).toContain("ERROR:");
   });
 });

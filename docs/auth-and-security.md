@@ -51,7 +51,7 @@ Path validation errors throw `PathValidationError`, which tool handlers catch an
 
 ## Reverse Proxy (`trust proxy`)
 
-When `TRUST_PROXY=true`, Express is configured with `app.set("trust proxy", 1)` to trust the first reverse proxy (Caddy). This ensures `req.ip` returns the real client IP (from `X-Forwarded-For`) instead of Caddy's Docker-internal IP, which is essential for per-client rate limiting. The default is `false` — set to `true` only when behind a reverse proxy (e.g., Caddy in production). The production `docker-compose.prod.yml` sets `TRUST_PROXY=true` explicitly.
+When `TRUST_PROXY=true`, Express is configured with `app.set("trust proxy", 1)` to trust the first reverse proxy (Caddy). This ensures `req.ip` returns the real client IP (from `X-Forwarded-For`) instead of Caddy's Docker-internal IP, which is essential for per-client rate limiting. The default is `false` — set to `true` only when behind a reverse proxy (e.g., Caddy in production). The `docker-compose.yml` sets `TRUST_PROXY=true` explicitly.
 
 ## Security Headers (Caddy)
 
@@ -71,9 +71,20 @@ All responses include `Access-Control-Allow-Origin: *` so that any MCP client (w
 - OAuth session store: 1000 max pending sessions, 10-minute TTL, one-time use
 - Client registration: 10 per minute per IP, 500 max clients, stale clients (>24h) evicted at 90% capacity
 - Token endpoint requests: 20 per minute per IP
-- Session limit: 100 concurrent MCP sessions
+- Session limit: configurable via `MAX_SESSIONS` env var (default 100)
 - Session TTL: 30 minutes of inactivity
 - Rate-limit maps are periodically pruned (60s interval) to prevent memory leaks
+
+### Rate Limiter Memory Cap
+
+The `RateLimiter` class (`src/utils/rateLimiter.ts`) accepts a `maxEntries` parameter (default: 10,000 via `DEFAULT_MAX_RATE_LIMIT_ENTRIES`) that caps the number of tracked keys. When a new key is added and the map is at capacity, the oldest entry is evicted (FIFO order via `Map` insertion order). A warning is logged when eviction occurs. This prevents unbounded memory growth from a large number of distinct client IPs.
+
+### OAuth Store Eviction Logging
+
+The OAuth store (`src/oauth/store.ts`) logs at `debug` level whenever entries are evicted due to capacity limits:
+- **Auth codes**: logged when the auth code store reaches its maximum and the oldest code is evicted
+- **Refresh tokens**: logged when the refresh token store reaches its maximum and the oldest token is evicted
+- **Stale clients**: logged when stale clients (>24h since registration) are evicted during cleanup at 90% client capacity
 
 ## File Size & Result Limits
 
@@ -106,3 +117,27 @@ The vault can contain `CLAUDE.md` files that provide instructions to connected L
 - The MCP SDK enforces JSON Schema validation on tool inputs
 - Git config values are validated to prevent argument injection (no leading `-`)
 - Git credential URLs are sanitized from error messages
+
+### Git Config Control Character Validation
+
+`GIT_REPO_URL`, `GIT_BRANCH`, `GIT_USER_NAME`, and `GIT_USER_EMAIL` are validated in `src/config.ts` to reject any value containing control characters (ASCII 0x00–0x1F and 0x7F). This prevents injection of newlines, null bytes, or other control sequences into git commands. The check uses the regex `/[\x00-\x1f\x7f]/` and throws a descriptive error at startup if a violation is detected.
+
+### Error Message Sanitization
+
+All tool error messages are passed through `sanitizeErrorForClient()` (`src/utils/toolResponse.ts`) before being returned to the client. This function:
+
+1. **Strips absolute paths** — replaces paths starting with `/vault/`, `/tmp/`, `/private/`, `/home/`, `/var/`, `/usr/`, `/etc/`, `/app/`, `/root/`, `/opt/`, `/mnt/`, `/data/` with just the filename (last path component)
+2. **Redacts git object hashes** — replaces 40-character hex strings with `<hash>`
+3. **Redacts git refs** — replaces `refs/...` patterns with `<ref>`
+4. **Truncates long messages** — messages exceeding 500 characters are truncated with `...`
+
+The `toolError()` helper automatically applies sanitization, so all tool handlers benefit without extra effort.
+
+### Commit Message Sanitization
+
+All git commit messages are passed through `sanitizeCommitMessage()` (`src/git/gitSync.ts`) before being used in `git commit -m`. This function:
+
+1. **Strips control characters** — replaces all ASCII control characters (0x00–0x1F, 0x7F) with spaces
+2. **Truncates long messages** — messages exceeding 200 characters are truncated (no ellipsis)
+
+This prevents injection of shell-interpreted characters or excessively long strings into git commands.

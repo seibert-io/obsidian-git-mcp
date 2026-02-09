@@ -20,19 +20,12 @@ docker run -d \
   obsidian-mcp-server
 ```
 
-### Docker Compose (Development)
+### Docker Compose
 ```bash
 docker compose up -d
 ```
 
-Edit `docker-compose.yml` to set environment variables. A template is provided with all variables.
-
-### Docker Compose (Production with HTTPS)
-```bash
-docker compose -f docker-compose.prod.yml up -d
-```
-
-The production compose file adds a Caddy reverse proxy that automatically obtains Let's Encrypt certificates. Set `SERVER_DOMAIN` in your `.env` file. See the [Production Deployment](#production-deployment-https) section below.
+The compose file runs the MCP server behind a Caddy reverse proxy that automatically obtains Let's Encrypt certificates. Set `SERVER_DOMAIN` in your `.env` file.
 
 ## Build Arguments and Runtime Environment Variables
 
@@ -90,12 +83,11 @@ Internet → :443 → Caddy (TLS termination) → :3000 → MCP Server
 | File | Purpose |
 |---|---|
 | `Caddyfile` | Caddy config — reverse proxies `{$SERVER_DOMAIN}` to `mcp:3000` |
-| `docker-compose.prod.yml` | Production compose with Caddy + MCP (ports 80/443 only) |
-| `docker-compose.yml` | Development compose (port 3000 direct, no HTTPS) |
+| `docker-compose.yml` | Production compose with Caddy + MCP (ports 80/443 only) |
 
 ### How `SERVER_URL` is Derived
 
-In production, `docker-compose.prod.yml` sets `SERVER_URL=https://${SERVER_DOMAIN}` on the MCP container automatically. The user only needs to set `SERVER_DOMAIN` in `.env`. For development without Caddy, `SERVER_URL` must be set directly.
+The `docker-compose.yml` sets `SERVER_URL=https://${SERVER_DOMAIN}` on the MCP container automatically. The user only needs to set `SERVER_DOMAIN` in `.env`. For development without Caddy, `SERVER_URL` must be set directly.
 
 ### Volume Persistence
 

@@ -8,6 +8,8 @@ import { resolveVaultPath } from "../utils/pathValidation.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
 import { MAX_FILE_SIZE, HIDDEN_DIRECTORY_GLOBS } from "../utils/constants.js";
+import { validateBatchSize, formatBatchResults, MAX_BATCH_SIZE } from "../utils/batchUtils.js";
+import type { BatchResult } from "../utils/batchUtils.js";
 const MAX_REGEX_LENGTH = 500;
 const MAX_GREP_RESULTS = 500;
 const MAX_FIND_RESULTS = 500;
@@ -34,40 +36,86 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
   server.registerTool(
     "search_files",
     {
-      description: "Find files by name pattern (glob). Example patterns: *.md, **/daily/*.md",
+      description: "Find files by name pattern (glob). Supports batch searches via 'searches' array (max 10).",
       inputSchema: {
-        pattern: z.string().describe("Glob pattern to match file names"),
-        path: z.string().default(".").describe("Directory to search in, relative to vault root"),
+        pattern: z.string().optional().describe("Glob pattern to match file names (single search)"),
+        path: z.string().default(".").optional().describe("Directory to search in, relative to vault root"),
+        searches: z.array(z.object({
+          pattern: z.string(),
+          path: z.string().default("."),
+        })).max(MAX_BATCH_SIZE).optional().describe("Multiple searches for batch (max 10)"),
       },
     },
-    async ({ pattern, path: searchPath }) => {
-      try {
-        const patternError = validateGlobPattern(pattern);
-        if (patternError) return toolError(patternError);
-        const resolved = resolveVaultPath(config.vaultPath, searchPath);
-        const matches = await fg(pattern, {
-          cwd: resolved,
-          dot: false,
-          ignore: HIDDEN_DIRECTORY_GLOBS,
-          followSymbolicLinks: false,
-        });
-        if (matches.length === 0) {
-          return toolSuccess("No files matched the pattern");
-        }
+    async ({ pattern: singlePattern, path: singlePath, searches }) => {
+      const searchEntries = searches ?? (singlePattern
+        ? [{ pattern: singlePattern, path: singlePath ?? "." }]
+        : []);
 
-        // Return paths relative to vault
-        const relativeBase = path.relative(config.vaultPath, resolved);
-        const results = matches.map((m) =>
-          relativeBase && relativeBase !== "."
-            ? path.join(relativeBase, m)
-            : m,
-        );
-        return toolSuccess(results.join("\n"));
-      } catch (error) {
-        const msg = getErrorMessage(error);
-        logger.error("search_files failed", { pattern, error: msg });
-        return toolError(`Search failed: ${msg}`);
+      const sizeError = validateBatchSize(searchEntries.length);
+      if (sizeError) return toolError(sizeError);
+
+      // Single search: original behavior
+      if (searchEntries.length === 1) {
+        const { pattern, path: searchPath } = searchEntries[0];
+        try {
+          const patternError = validateGlobPattern(pattern);
+          if (patternError) return toolError(patternError);
+          const resolved = resolveVaultPath(config.vaultPath, searchPath);
+          const matches = await fg(pattern, {
+            cwd: resolved,
+            dot: false,
+            ignore: HIDDEN_DIRECTORY_GLOBS,
+            followSymbolicLinks: false,
+          });
+          if (matches.length === 0) {
+            return toolSuccess("No files matched the pattern");
+          }
+
+          const relativeBase = path.relative(config.vaultPath, resolved);
+          const results = matches.map((m) =>
+            relativeBase && relativeBase !== "."
+              ? path.join(relativeBase, m)
+              : m,
+          );
+          return toolSuccess(results.join("\n"));
+        } catch (error) {
+          const msg = getErrorMessage(error);
+          logger.error("search_files failed", { pattern, error: msg });
+          return toolError(`Search failed: ${msg}`);
+        }
       }
+
+      // Batch: search in parallel
+      const results = await Promise.all(
+        searchEntries.map(async ({ pattern, path: searchPath }, index): Promise<BatchResult> => {
+          try {
+            const patternError = validateGlobPattern(pattern);
+            if (patternError) return { index, path: searchPath, success: false, content: patternError };
+            const resolved = resolveVaultPath(config.vaultPath, searchPath);
+            const matches = await fg(pattern, {
+              cwd: resolved,
+              dot: false,
+              ignore: HIDDEN_DIRECTORY_GLOBS,
+              followSymbolicLinks: false,
+            });
+            if (matches.length === 0) {
+              return { index, path: `${pattern} in ${searchPath}`, success: true, content: "No files matched the pattern" };
+            }
+
+            const relativeBase = path.relative(config.vaultPath, resolved);
+            const matchResults = matches.map((m) =>
+              relativeBase && relativeBase !== "."
+                ? path.join(relativeBase, m)
+                : m,
+            );
+            return { index, path: `${pattern} in ${searchPath}`, success: true, content: matchResults.join("\n") };
+          } catch (error) {
+            return { index, path: `${pattern} in ${searchPath}`, success: false, content: getErrorMessage(error) };
+          }
+        }),
+      );
+
+      return toolSuccess(formatBatchResults(results));
     },
   );
 
@@ -165,69 +213,145 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
   server.registerTool(
     "find_files",
     {
-      description: "Advanced file finder with filters for name, modification time, and size",
+      description: "Advanced file finder with filters. Supports batch queries via 'queries' array (max 10).",
       inputSchema: {
-        path: z.string().default(".").describe("Directory to search in, relative to vault root"),
+        path: z.string().default(".").optional().describe("Directory to search in, relative to vault root"),
         name: z.string().optional().describe("File name glob pattern"),
         modified_after: z.string().optional().describe("ISO date string — only files modified after this date"),
         modified_before: z.string().optional().describe("ISO date string — only files modified before this date"),
         size_min: z.number().optional().describe("Minimum file size in bytes"),
         size_max: z.number().optional().describe("Maximum file size in bytes"),
+        queries: z.array(z.object({
+          path: z.string().default("."),
+          name: z.string().optional(),
+          modified_after: z.string().optional(),
+          modified_before: z.string().optional(),
+          size_min: z.number().optional(),
+          size_max: z.number().optional(),
+        })).max(MAX_BATCH_SIZE).optional().describe("Multiple queries for batch find (max 10)"),
       },
     },
-    async ({ path: searchPath, name, modified_after, modified_before, size_min, size_max }) => {
-      try {
-        const resolved = resolveVaultPath(config.vaultPath, searchPath);
-        const globPattern = name ?? "**/*";
-        const globError = validateGlobPattern(globPattern);
-        if (globError) return toolError(globError);
-        const files = await fg(globPattern, {
-          cwd: resolved,
-          dot: false,
-          ignore: HIDDEN_DIRECTORY_GLOBS,
-          onlyFiles: true,
-          stats: true,
-          followSymbolicLinks: false,
-        });
+    async ({ path: singlePath, name, modified_after, modified_before, size_min, size_max, queries }) => {
+      const queryEntries = queries ?? [{
+        path: singlePath ?? ".",
+        name,
+        modified_after,
+        modified_before,
+        size_min,
+        size_max,
+      }];
 
-        const afterDate = modified_after ? new Date(modified_after) : null;
-        const beforeDate = modified_before ? new Date(modified_before) : null;
+      const sizeError = validateBatchSize(queryEntries.length);
+      if (sizeError) return toolError(sizeError);
 
-        const results: string[] = [];
+      // Single query: original behavior
+      if (queryEntries.length === 1) {
+        const q = queryEntries[0];
+        try {
+          const resolved = resolveVaultPath(config.vaultPath, q.path);
+          const globPattern = q.name ?? "**/*";
+          const globError = validateGlobPattern(globPattern);
+          if (globError) return toolError(globError);
+          const files = await fg(globPattern, {
+            cwd: resolved,
+            dot: false,
+            ignore: HIDDEN_DIRECTORY_GLOBS,
+            onlyFiles: true,
+            stats: true,
+            followSymbolicLinks: false,
+          });
 
-        for (const entry of files) {
-          if (results.length >= MAX_FIND_RESULTS) break;
+          const afterDate = q.modified_after ? new Date(q.modified_after) : null;
+          const beforeDate = q.modified_before ? new Date(q.modified_before) : null;
 
-          const filePath = path.join(resolved, entry.path);
-          const fileStat = await stat(filePath);
+          const results: string[] = [];
 
-          // Filter by modification time
-          if (afterDate && fileStat.mtime < afterDate) continue;
-          if (beforeDate && fileStat.mtime > beforeDate) continue;
+          for (const entry of files) {
+            if (results.length >= MAX_FIND_RESULTS) break;
 
-          // Filter by size
-          if (size_min !== undefined && fileStat.size < size_min) continue;
-          if (size_max !== undefined && fileStat.size > size_max) continue;
+            const filePath = path.join(resolved, entry.path);
+            const fileStat = await stat(filePath);
 
-          const relPath = path.relative(config.vaultPath, filePath);
-          results.push(
-            `${relPath}  (${fileStat.size} bytes, modified: ${fileStat.mtime.toISOString()})`,
-          );
+            if (afterDate && fileStat.mtime < afterDate) continue;
+            if (beforeDate && fileStat.mtime > beforeDate) continue;
+            if (q.size_min !== undefined && fileStat.size < q.size_min) continue;
+            if (q.size_max !== undefined && fileStat.size > q.size_max) continue;
+
+            const relPath = path.relative(config.vaultPath, filePath);
+            results.push(
+              `${relPath}  (${fileStat.size} bytes, modified: ${fileStat.mtime.toISOString()})`,
+            );
+          }
+
+          if (results.length === 0) {
+            return toolSuccess("No files found matching criteria");
+          }
+          let output = results.join("\n");
+          if (results.length >= MAX_FIND_RESULTS) {
+            output += `\n\n(Results truncated at ${MAX_FIND_RESULTS} files)`;
+          }
+          return toolSuccess(output);
+        } catch (error) {
+          const msg = getErrorMessage(error);
+          logger.error("find_files failed", { error: msg });
+          return toolError(`Find failed: ${msg}`);
         }
-
-        if (results.length === 0) {
-          return toolSuccess("No files found matching criteria");
-        }
-        let output = results.join("\n");
-        if (results.length >= MAX_FIND_RESULTS) {
-          output += `\n\n(Results truncated at ${MAX_FIND_RESULTS} files)`;
-        }
-        return toolSuccess(output);
-      } catch (error) {
-        const msg = getErrorMessage(error);
-        logger.error("find_files failed", { error: msg });
-        return toolError(`Find failed: ${msg}`);
       }
+
+      // Batch: find in parallel
+      const batchResults = await Promise.all(
+        queryEntries.map(async (q, index): Promise<BatchResult> => {
+          try {
+            const resolved = resolveVaultPath(config.vaultPath, q.path);
+            const globPattern = q.name ?? "**/*";
+            const globError = validateGlobPattern(globPattern);
+            if (globError) return { index, path: q.path, success: false, content: globError };
+            const files = await fg(globPattern, {
+              cwd: resolved,
+              dot: false,
+              ignore: HIDDEN_DIRECTORY_GLOBS,
+              onlyFiles: true,
+              stats: true,
+              followSymbolicLinks: false,
+            });
+
+            const afterDate = q.modified_after ? new Date(q.modified_after) : null;
+            const beforeDate = q.modified_before ? new Date(q.modified_before) : null;
+
+            const results: string[] = [];
+
+            for (const entry of files) {
+              if (results.length >= MAX_FIND_RESULTS) break;
+
+              const filePath = path.join(resolved, entry.path);
+              const fileStat = await stat(filePath);
+
+              if (afterDate && fileStat.mtime < afterDate) continue;
+              if (beforeDate && fileStat.mtime > beforeDate) continue;
+              if (q.size_min !== undefined && fileStat.size < q.size_min) continue;
+              if (q.size_max !== undefined && fileStat.size > q.size_max) continue;
+
+              const relPath = path.relative(config.vaultPath, filePath);
+              results.push(
+                `${relPath}  (${fileStat.size} bytes, modified: ${fileStat.mtime.toISOString()})`,
+              );
+            }
+
+            if (results.length === 0) {
+              return { index, path: q.path, success: true, content: "No files found matching criteria" };
+            }
+            let output = results.join("\n");
+            if (results.length >= MAX_FIND_RESULTS) {
+              output += `\n\n(Results truncated at ${MAX_FIND_RESULTS} files)`;
+            }
+            return { index, path: q.path, success: true, content: output };
+          } catch (error) {
+            return { index, path: q.path, success: false, content: getErrorMessage(error) };
+          }
+        }),
+      );
+
+      return toolSuccess(formatBatchResults(batchResults));
     },
   );
 }
