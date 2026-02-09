@@ -47,15 +47,18 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     await execFileAsync("git", ["add", "."], { cwd: resolvedVault });
     await execFileAsync("git", ["commit", "-m", "init"], { cwd: resolvedVault });
 
-    // Create MCP server
-    const mcpServer = new McpServer({
-      name: "test-server",
-      version: "1.0.0",
-    });
-    registerFileOperations(mcpServer, testConfig);
-    registerDirectoryOps(mcpServer, testConfig);
-    registerSearchOperations(mcpServer, testConfig);
-    registerVaultOperations(mcpServer, testConfig);
+    // Factory creates a fresh McpServer per session (mirrors production pattern)
+    const createMcpServer = () => {
+      const server = new McpServer({
+        name: "test-server",
+        version: "1.0.0",
+      });
+      registerFileOperations(server, testConfig);
+      registerDirectoryOps(server, testConfig);
+      registerSearchOperations(server, testConfig);
+      registerVaultOperations(server, testConfig);
+      return server;
+    };
 
     // Set up Express app with Streamable HTTP transport
     const app = express();
@@ -79,7 +82,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
         const sid = transport.sessionId;
         if (sid) transports.delete(sid);
       };
-      await mcpServer.connect(transport);
+      await createMcpServer().connect(transport);
       await transport.handleRequest(req, res, req.body);
     });
 
@@ -213,5 +216,27 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     expect(result.isError).toBe(true);
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     expect(text).toContain("traversal");
+  });
+
+  it("supports multiple concurrent sessions without 'Already connected' error", async () => {
+    // Second client connects to the same server — must not fail
+    const secondClient = new Client({ name: "test-client-2", version: "1.0.0" });
+    const secondTransport = new StreamableHTTPClientTransport(
+      new URL(`${baseUrl}/mcp`),
+    );
+    await secondClient.connect(secondTransport);
+
+    // Both clients can list tools independently
+    const [firstResult, secondResult] = await Promise.all([
+      client.listTools(),
+      secondClient.listTools(),
+    ]);
+
+    expect(firstResult.tools.length).toBeGreaterThan(0);
+    expect(secondResult.tools.length).toBeGreaterThan(0);
+    expect(firstResult.tools.map(t => t.name)).toContain("read_file");
+    expect(secondResult.tools.map(t => t.name)).toContain("read_file");
+
+    await secondClient.close();
   });
 });

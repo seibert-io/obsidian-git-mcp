@@ -20,6 +20,7 @@ const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 interface SessionEntry {
   transport: StreamableHTTPServerTransport;
+  server: McpServer;
   lastActivity: number;
 }
 
@@ -28,7 +29,7 @@ export interface HttpServerHandle {
 }
 
 export async function startHttpServer(
-  mcpServer: McpServer,
+  createMcpServer: () => McpServer,
   config: Config,
 ): Promise<HttpServerHandle> {
   const app = express();
@@ -90,6 +91,7 @@ export async function startHttpServer(
     for (const [sid, entry] of sessions) {
       if (now - entry.lastActivity > SESSION_TTL_MS) {
         entry.transport.close().catch(() => {});
+        entry.server.close().catch(() => {});
         sessions.delete(sid);
         logger.info("Expired idle session", { sessionId: sid });
       }
@@ -119,11 +121,12 @@ export async function startHttpServer(
       return;
     }
 
-    // New session: create a new transport
+    // New session: create a new transport and a dedicated McpServer
+    const mcpServer = createMcpServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
       onsessioninitialized: (newSessionId) => {
-        sessions.set(newSessionId, { transport, lastActivity: Date.now() });
+        sessions.set(newSessionId, { transport, server: mcpServer, lastActivity: Date.now() });
         logger.info("New MCP session initialized", {
           sessionId: newSessionId,
         });
@@ -136,6 +139,7 @@ export async function startHttpServer(
         sessions.delete(sid);
         logger.info("MCP session closed", { sessionId: sid });
       }
+      mcpServer.close().catch(() => {});
     };
 
     await mcpServer.connect(transport);
@@ -174,10 +178,18 @@ export async function startHttpServer(
   });
 
   return {
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        clearInterval(cleanupInterval);
+    close: async () => {
+      clearInterval(cleanupInterval);
+      // Close all active sessions before shutting down the HTTP server
+      const closePromises = [...sessions.values()].map(async (entry) => {
+        await entry.transport.close().catch(() => {});
+        await entry.server.close().catch(() => {});
+      });
+      await Promise.all(closePromises);
+      sessions.clear();
+      return new Promise<void>((resolve, reject) => {
         server.close((err) => (err ? reject(err) : resolve()));
-      }),
+      });
+    },
   };
 }

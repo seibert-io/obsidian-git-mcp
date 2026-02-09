@@ -21,18 +21,14 @@ async function main(): Promise<void> {
   // Start periodic git sync
   startPeriodicSync(config);
 
-  // Create MCP server with all tools
-  const mcpServer = createMcpServer(config);
-
-  // Start HTTP transport
-  const httpServer = await startHttpServer(mcpServer, config);
+  // Start HTTP transport (factory creates a fresh McpServer per session)
+  const httpServer = await startHttpServer(() => createMcpServer(config), config);
 
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("Shutting down...");
     stopPeriodicSync();
     await httpServer.close();
-    await mcpServer.close();
     process.exit(0);
   };
 

@@ -44,6 +44,7 @@ The Obsidian Vault MCP Server is a Dockerized Node.js application that exposes a
 
 ## Key Design Decisions
 
+- **Factory-per-session**: Each new client connection creates a fresh `McpServer` instance via a factory function (`() => McpServer`). The MCP SDK only supports one transport per server, so sharing a single instance across sessions causes "Already connected to a transport" errors. The factory is passed to `startHttpServer()` and called once per new session in the POST handler.
 - **Stateful sessions**: Each client connection gets a unique session ID tracked by a `StreamableHTTPServerTransport` instance
 - **Path sandboxing**: All file paths are resolved and validated against `VAULT_PATH` before any I/O
 - **Git-triggered writes**: Every write operation (write, edit, delete, rename) triggers `git add . && git commit && git push`
