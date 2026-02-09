@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.2.0...v1.3.0) (2026-02-09)
+
+
+### Features
+
+* debounced auto-sync for write operations ([#2](https://github.com/seibert-io/obsidian-git-mcp/issues/2)) ([1264e97](https://github.com/seibert-io/obsidian-git-mcp/commit/1264e97cccb80640734c3a06b305993b59b879e3))
+
 # [1.2.0](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.1.0...v1.2.0) (2026-02-09)
 
 
