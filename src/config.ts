@@ -8,6 +8,7 @@ export interface Config {
   gitRepoUrl: string;
   gitBranch: string;
   gitSyncIntervalSeconds: number;
+  gitDebounceSyncDelaySeconds: number;
   gitUserName: string;
   gitUserEmail: string;
   vaultPath: string;
@@ -66,6 +67,14 @@ export function loadConfig(): Config {
   );
   if (isNaN(syncInterval) || syncInterval < 0) {
     throw new Error("GIT_SYNC_INTERVAL_SECONDS must be a non-negative number");
+  }
+
+  const debounceSyncDelay = parseInt(
+    process.env.GIT_DEBOUNCE_SYNC_DELAY_SECONDS ?? "10",
+    10,
+  );
+  if (isNaN(debounceSyncDelay) || debounceSyncDelay < 0) {
+    throw new Error("GIT_DEBOUNCE_SYNC_DELAY_SECONDS must be a non-negative number");
   }
 
   const port = parseInt(process.env.PORT ?? "3000", 10);
@@ -137,6 +146,7 @@ export function loadConfig(): Config {
     gitRepoUrl,
     gitBranch,
     gitSyncIntervalSeconds: syncInterval,
+    gitDebounceSyncDelaySeconds: debounceSyncDelay,
     gitUserName,
     gitUserEmail,
     vaultPath: process.env.VAULT_PATH ?? "/vault",

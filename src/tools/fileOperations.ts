@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { resolveVaultPathSafe } from "../utils/pathValidation.js";
-import { commitAndPush, commitAndPushBatch } from "../git/gitSync.js";
+import { scheduleSync } from "../git/debouncedSync.js";
 import { validateBatchSize, formatBatchResults, MAX_BATCH_SIZE } from "../utils/batchUtils.js";
 import type { BatchResult } from "../utils/batchUtils.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
@@ -138,7 +138,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
           logger.error("write_file failed", { path: filePath, error: result.content });
           return toolError(`Failed to write file: ${result.content}`);
         }
-        await commitAndPush(config, `MCP: write ${filePath}`);
+        scheduleSync(`MCP: write ${filePath}`);
         return toolSuccess(result.content);
       }
 
@@ -153,7 +153,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
       }
 
       if (writtenPaths.length > 0) {
-        await commitAndPushBatch(config, writtenPaths);
+        scheduleSync(`MCP: batch write ${writtenPaths.length} files`);
       }
 
       return toolSuccess(formatBatchResults(results));
@@ -191,7 +191,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
           logger.error("edit_file failed", { path: filePath, error: result.content });
           return toolError(`Failed to edit file: ${result.content}`);
         }
-        await commitAndPush(config, `MCP: edit ${filePath}`);
+        scheduleSync(`MCP: edit ${filePath}`);
         return toolSuccess(result.content);
       }
 
@@ -206,7 +206,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
       }
 
       if (editedPaths.length > 0) {
-        await commitAndPushBatch(config, editedPaths);
+        scheduleSync(`MCP: batch edit ${editedPaths.length} files`);
       }
 
       return toolSuccess(formatBatchResults(results));
@@ -226,7 +226,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
       try {
         const resolved = await resolveVaultPathSafe(config.vaultPath, filePath);
         await unlink(resolved);
-        await commitAndPush(config, `MCP: delete ${filePath}`);
+        scheduleSync(`MCP: delete ${filePath}`);
         return toolSuccess(`File deleted: ${filePath}`);
       } catch (error) {
         const msg = getErrorMessage(error);
@@ -252,7 +252,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
         const resolvedNew = await resolveVaultPathSafe(config.vaultPath, new_path);
         await mkdir(path.dirname(resolvedNew), { recursive: true });
         await rename(resolvedOld, resolvedNew);
-        await commitAndPush(config, `MCP: rename ${old_path} -> ${new_path}`);
+        scheduleSync(`MCP: rename ${old_path} -> ${new_path}`);
         return toolSuccess(`File renamed: ${old_path} -> ${new_path}`);
       } catch (error) {
         const msg = getErrorMessage(error);

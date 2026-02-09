@@ -1,6 +1,7 @@
 import { loadConfig } from "./config.js";
 import { setLogLevel, logger } from "./utils/logger.js";
 import { initializeVault, startPeriodicSync, stopPeriodicSync } from "./git/gitSync.js";
+import { initDebouncedSync, flushDebouncedSync } from "./git/debouncedSync.js";
 import { createMcpServer } from "./server.js";
 import { startHttpServer } from "./transport.js";
 import { getErrorMessage } from "./utils/toolResponse.js";
@@ -19,8 +20,9 @@ async function main(): Promise<void> {
   // Initialize vault (clone or pull)
   await initializeVault(config);
 
-  // Start periodic git sync
+  // Start periodic git sync and debounced write sync
   startPeriodicSync(config);
+  initDebouncedSync(config);
 
   // Start HTTP transport (factory creates a fresh McpServer per session)
   const httpServer = await startHttpServer(async () => createMcpServer(config), config);
@@ -29,6 +31,7 @@ async function main(): Promise<void> {
   const shutdown = async () => {
     logger.info("Shutting down...");
     stopPeriodicSync();
+    await flushDebouncedSync();
     await httpServer.close();
     process.exit(0);
   };
