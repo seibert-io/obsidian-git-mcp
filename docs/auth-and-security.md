@@ -16,7 +16,7 @@ The session between the authorize redirect and the GitHub callback is bridged vi
 
 ### OAuth 2.1 (`src/oauth/`)
 
-Full OAuth 2.1 implementation with PKCE (S256) and Dynamic Client Registration. See `docs/oauth.md` for details.
+Full OAuth 2.1 implementation with PKCE (S256) and Dynamic Client Registration. Supports both **confidential clients** (`client_secret_post`) and **public clients** (`token_endpoint_auth_method: "none"`). Public clients (e.g. Claude Code CLI) authenticate via PKCE only — no client secret is generated or accepted. See `docs/oauth.md` for details.
 
 ## Path Security (`src/utils/pathValidation.ts`)
 

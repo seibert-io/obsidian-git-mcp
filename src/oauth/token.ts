@@ -15,6 +15,37 @@ function verifyPkce(codeVerifier: string, codeChallenge: string): boolean {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * Normalizes the client_secret from a form body.
+ * Form-urlencoded sends empty fields as "", which we normalize to undefined
+ * so that `authenticateClient` receives a clean signal.
+ */
+function normalizeClientSecret(value: string | undefined): string | undefined {
+  return value === "" || value === undefined ? undefined : value;
+}
+
+function issueTokenResponse(
+  res: Response,
+  clientId: string,
+  config: Config,
+  store: OAuthStore,
+  logMessage: string,
+): void {
+  const accessToken = createAccessToken(clientId, config.jwtSecret, config.accessTokenExpirySeconds);
+  const refreshToken = store.createRefreshToken(clientId, config.refreshTokenExpirySeconds);
+
+  logger.info(logMessage, { clientId });
+
+  res.set("Cache-Control", "no-store");
+  res.set("Pragma", "no-cache");
+  res.json({
+    access_token: accessToken,
+    token_type: "Bearer",
+    expires_in: config.accessTokenExpirySeconds,
+    refresh_token: refreshToken,
+  });
+}
+
 export function handleToken(config: Config, store: OAuthStore, rateLimiter: RateLimiter) {
   return (req: Request, res: Response): void => {
     const ip = req.ip ?? "unknown";
@@ -38,13 +69,13 @@ export function handleToken(config: Config, store: OAuthStore, rateLimiter: Rate
 function handleAuthorizationCodeGrant(req: Request, res: Response, config: Config, store: OAuthStore): void {
   const { code, redirect_uri, client_id, client_secret, code_verifier } = req.body;
 
-  if (!code || !redirect_uri || !client_id || !client_secret || !code_verifier) {
+  if (!code || !redirect_uri || !client_id || !code_verifier) {
     res.status(400).json({ error: "invalid_request", error_description: "Missing required parameters" });
     return;
   }
 
-  // Validate client
-  if (!store.validateClientSecret(client_id, client_secret)) {
+  // Authenticate client (secret required for confidential, forbidden for public)
+  if (!store.authenticateClient(client_id, normalizeClientSecret(client_secret))) {
     res.status(401).json({ error: "invalid_client" });
     return;
   }
@@ -74,32 +105,19 @@ function handleAuthorizationCodeGrant(req: Request, res: Response, config: Confi
     return;
   }
 
-  // Issue tokens
-  const accessToken = createAccessToken(client_id, config.jwtSecret, config.accessTokenExpirySeconds);
-  const refreshToken = store.createRefreshToken(client_id, config.refreshTokenExpirySeconds);
-
-  logger.info("OAuth tokens issued via authorization_code", { clientId: client_id });
-
-  res.set("Cache-Control", "no-store");
-  res.set("Pragma", "no-cache");
-  res.json({
-    access_token: accessToken,
-    token_type: "Bearer",
-    expires_in: config.accessTokenExpirySeconds,
-    refresh_token: refreshToken,
-  });
+  issueTokenResponse(res, client_id, config, store, "OAuth tokens issued via authorization_code");
 }
 
 function handleRefreshTokenGrant(req: Request, res: Response, config: Config, store: OAuthStore): void {
   const { refresh_token, client_id, client_secret } = req.body;
 
-  if (!refresh_token || !client_id || !client_secret) {
+  if (!refresh_token || !client_id) {
     res.status(400).json({ error: "invalid_request", error_description: "Missing required parameters" });
     return;
   }
 
-  // Validate client
-  if (!store.validateClientSecret(client_id, client_secret)) {
+  // Authenticate client (secret required for confidential, forbidden for public)
+  if (!store.authenticateClient(client_id, normalizeClientSecret(client_secret))) {
     res.status(401).json({ error: "invalid_client" });
     return;
   }
@@ -117,18 +135,5 @@ function handleRefreshTokenGrant(req: Request, res: Response, config: Config, st
     return;
   }
 
-  // Issue new token pair
-  const accessToken = createAccessToken(client_id, config.jwtSecret, config.accessTokenExpirySeconds);
-  const newRefreshToken = store.createRefreshToken(client_id, config.refreshTokenExpirySeconds);
-
-  logger.info("OAuth tokens refreshed", { clientId: client_id });
-
-  res.set("Cache-Control", "no-store");
-  res.set("Pragma", "no-cache");
-  res.json({
-    access_token: accessToken,
-    token_type: "Bearer",
-    expires_in: config.accessTokenExpirySeconds,
-    refresh_token: newRefreshToken,
-  });
+  issueTokenResponse(res, client_id, config, store, "OAuth tokens refreshed");
 }

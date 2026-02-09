@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import type { OAuthStore } from "./store.js";
+import type { TokenEndpointAuthMethod } from "./store.js";
 import type { RateLimiter } from "../utils/rateLimiter.js";
 import { logger } from "../utils/logger.js";
 
@@ -12,7 +13,7 @@ const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "::1"];
 
 const SUPPORTED_GRANT_TYPES = ["authorization_code", "refresh_token"];
 const SUPPORTED_RESPONSE_TYPES = ["code"];
-const SUPPORTED_AUTH_METHODS = ["client_secret_post"];
+const SUPPORTED_AUTH_METHODS: readonly TokenEndpointAuthMethod[] = ["client_secret_post", "none"];
 const MAX_CLIENTS = 500;
 
 /** Validate an array field against a set of supported values. */
@@ -111,30 +112,33 @@ export function handleRegistration(store: OAuthStore, rateLimiter: RateLimiter) 
       return;
     }
 
-    const requestedAuthMethod = token_endpoint_auth_method ?? "client_secret_post";
-    if (!SUPPORTED_AUTH_METHODS.includes(requestedAuthMethod)) {
+    const requestedAuthMethod = (token_endpoint_auth_method ?? "client_secret_post") as string;
+    if (!SUPPORTED_AUTH_METHODS.includes(requestedAuthMethod as TokenEndpointAuthMethod)) {
       res.status(400).json({ error: "invalid_request", error_description: `Unsupported token_endpoint_auth_method: ${requestedAuthMethod}` });
       return;
     }
 
-    const client = store.registerClient(
-      client_name,
-      redirect_uris,
-      grantTypesResult.values,
-      responseTypesResult.values,
-      requestedAuthMethod,
-    );
+    const client = store.registerClient({
+      clientName: client_name,
+      redirectUris: redirect_uris,
+      grantTypes: grantTypesResult.values,
+      responseTypes: responseTypesResult.values,
+      tokenEndpointAuthMethod: requestedAuthMethod as TokenEndpointAuthMethod,
+    });
 
     logger.info("OAuth client registered", { clientId: client.clientId, clientName: client.clientName });
 
-    res.status(201).json({
+    const response: Record<string, unknown> = {
       client_id: client.clientId,
-      client_secret: client.clientSecret,
       client_name: client.clientName,
       redirect_uris: client.redirectUris,
       grant_types: client.grantTypes,
       response_types: client.responseTypes,
       token_endpoint_auth_method: client.tokenEndpointAuthMethod,
-    });
+    };
+    if (client.clientSecret !== undefined) {
+      response.client_secret = client.clientSecret;
+    }
+    res.status(201).json(response);
   };
 }

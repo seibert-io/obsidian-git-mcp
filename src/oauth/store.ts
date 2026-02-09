@@ -2,17 +2,28 @@ import crypto from "node:crypto";
 
 const MAX_AUTH_CODES = 1000;
 const MAX_REFRESH_TOKENS = 2000;
+const AUTH_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const CLIENT_STALENESS_MS = 24 * 60 * 60 * 1000; // 24 hours
 const CLIENT_CLEANUP_THRESHOLD = 0.9; // evict stale clients when at 90% capacity
 
-export interface RegisteredClient {
-  clientId: string;
-  clientSecret: string;
+export type TokenEndpointAuthMethod = "client_secret_post" | "none";
+
+export interface ClientRegistrationParams {
   clientName: string;
   redirectUris: string[];
   grantTypes: string[];
   responseTypes: string[];
-  tokenEndpointAuthMethod: string;
+  tokenEndpointAuthMethod: TokenEndpointAuthMethod;
+}
+
+export interface RegisteredClient {
+  clientId: string;
+  clientSecret: string | undefined;
+  clientName: string;
+  redirectUris: string[];
+  grantTypes: string[];
+  responseTypes: string[];
+  tokenEndpointAuthMethod: TokenEndpointAuthMethod;
   registeredAt: number;
 }
 
@@ -30,6 +41,24 @@ export interface RefreshTokenEntry {
   expiresAt: number;
 }
 
+/**
+ * Verifies client credentials based on the registered auth method.
+ * Pure function — no side effects, no lookups.
+ */
+export function verifyClientCredentials(
+  client: RegisteredClient,
+  clientSecret: string | undefined,
+): boolean {
+  if (client.tokenEndpointAuthMethod === "none") {
+    return clientSecret === undefined;
+  }
+
+  if (!client.clientSecret || !clientSecret) return false;
+  const a = Buffer.from(client.clientSecret);
+  const b = Buffer.from(clientSecret);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 export class OAuthStore {
   private clients = new Map<string, RegisteredClient>();
   private authCodes = new Map<string, AuthorizationCode>();
@@ -37,21 +66,16 @@ export class OAuthStore {
 
   // --- Client Registration ---
 
-  registerClient(
-    clientName: string,
-    redirectUris: string[],
-    grantTypes: string[],
-    responseTypes: string[],
-    tokenEndpointAuthMethod: string,
-  ): RegisteredClient {
+  registerClient(params: ClientRegistrationParams): RegisteredClient {
+    const isPublicClient = params.tokenEndpointAuthMethod === "none";
     const client: RegisteredClient = {
       clientId: crypto.randomUUID(),
-      clientSecret: crypto.randomBytes(32).toString("hex"),
-      clientName,
-      redirectUris,
-      grantTypes,
-      responseTypes,
-      tokenEndpointAuthMethod,
+      clientSecret: isPublicClient ? undefined : crypto.randomBytes(32).toString("hex"),
+      clientName: params.clientName,
+      redirectUris: params.redirectUris,
+      grantTypes: params.grantTypes,
+      responseTypes: params.responseTypes,
+      tokenEndpointAuthMethod: params.tokenEndpointAuthMethod,
       registeredAt: Date.now(),
     };
     this.clients.set(client.clientId, client);
@@ -66,13 +90,14 @@ export class OAuthStore {
     return this.clients.get(clientId);
   }
 
-  validateClientSecret(clientId: string, clientSecret: string): boolean {
+  /**
+   * Looks up a client and verifies credentials.
+   * Delegates to the pure `verifyClientCredentials` function.
+   */
+  authenticateClient(clientId: string, clientSecret: string | undefined): boolean {
     const client = this.clients.get(clientId);
     if (!client) return false;
-    // Timing-safe comparison
-    const a = Buffer.from(client.clientSecret);
-    const b = Buffer.from(clientSecret);
-    return a.length === b.length && crypto.timingSafeEqual(a, b);
+    return verifyClientCredentials(client, clientSecret);
   }
 
   // --- Authorization Codes ---
@@ -93,7 +118,7 @@ export class OAuthStore {
       clientId,
       redirectUri,
       codeChallenge,
-      expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
+      expiresAt: Date.now() + AUTH_CODE_TTL_MS,
     });
     return code;
   }

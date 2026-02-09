@@ -27,7 +27,7 @@ import { OAuthSessionStore } from "../src/oauth/sessionStore.js";
 import { RateLimiter } from "../src/utils/rateLimiter.js";
 import { createTestConfig } from "./helpers/testConfig.js";
 import { installGitHubMock, uninstallGitHubMock, resetGitHubMock } from "./helpers/mockGitHub.js";
-import { startAuthorizeFlow, completeCallback, completeOAuthFlow } from "./helpers/oauthHelpers.js";
+import { startAuthorizeFlow, completeCallback, completeOAuthFlow, completePublicClientOAuthFlow } from "./helpers/oauthHelpers.js";
 
 const execFileAsync = promisify(execFile);
 const TEST_VAULT = "/tmp/test-vault-oauth-flow";
@@ -380,5 +380,46 @@ describe("OAuth Full-Flow Integration: OAuth → MCP Transport", () => {
     expect(asm.grant_types_supported).toContain("refresh_token");
     expect(asm.code_challenge_methods_supported).toContain("S256");
     expect(asm.token_endpoint_auth_methods_supported).toContain("client_secret_post");
+    expect(asm.token_endpoint_auth_methods_supported).toContain("none");
+  });
+
+  // --- Test 11: Public Client full flow → MCP listTools ---
+  it("public client full flow: OAuth (no secret) → MCP listTools", async () => {
+    const { accessToken } = await completePublicClientOAuthFlow(baseUrl);
+    const client = await connectAuthenticatedClient(baseUrl, accessToken);
+
+    const result = await client.listTools();
+    const toolNames = result.tools.map((t) => t.name);
+    expect(toolNames).toContain("read_file");
+    expect(toolNames).toContain("list_directory");
+
+    await client.close();
+  });
+
+  // --- Test 12: Public Client refresh token → new access token → MCP works ---
+  it("public client refresh token grants new access token that works with MCP", async () => {
+    const { refreshToken, clientId } = await completePublicClientOAuthFlow(baseUrl);
+
+    // Exchange refresh token for new access token (no client_secret)
+    const refreshRes = await fetch(`${baseUrl}/oauth/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: clientId,
+      }).toString(),
+    });
+    expect(refreshRes.status).toBe(200);
+    const newTokens = await refreshRes.json();
+    expect(newTokens.access_token).toBeDefined();
+    expect(newTokens.refresh_token).not.toBe(refreshToken);
+
+    // Use refreshed token for MCP
+    const client = await connectAuthenticatedClient(baseUrl, newTokens.access_token);
+    const result = await client.listTools();
+    expect(result.tools.length).toBeGreaterThan(0);
+
+    await client.close();
   });
 });

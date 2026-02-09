@@ -15,7 +15,7 @@ npm run test:watch # Run in watch mode
 
 ### Path Validation (`tests/pathValidation.test.ts`)
 
-Unit tests for the security-critical path validation logic (17 tests):
+Unit tests for the security-critical path validation logic:
 - Resolves valid relative paths correctly
 - Rejects empty paths
 - Rejects `..` path traversal (various forms)
@@ -26,28 +26,28 @@ Unit tests for the security-critical path validation logic (17 tests):
 
 ### Integration (`tests/integration.test.ts`)
 
-End-to-end test that starts a real MCP server over Streamable HTTP (9 tests):
+End-to-end test that starts a real MCP server over Streamable HTTP:
 - Creates a temporary vault with test files
 - Initializes a git repository in the test vault
 - Starts an Express server with `StreamableHTTPServerTransport`
 - Connects an MCP client to the server
-- Tests all 14 tools: listing, reading, searching, grep, backlinks, tags, vault info, guides
+- Tests all tools: listing, reading, searching, grep, backlinks, tags, vault info, guides
 - Verifies path traversal is rejected at the tool level
 
 ### OAuth (`tests/oauth.test.ts`)
 
-Tests for the full OAuth 2.1 implementation with GitHub authentication (35 tests):
+Tests for the full OAuth 2.1 implementation with GitHub authentication:
 
-**Server metadata & registration (3 tests):**
+**Server metadata & registration:**
 - Server metadata endpoint returns correct RFC 8414 data
 - Dynamic Client Registration (DCR) — success and failure cases
 - Redirect URI validation (HTTPS required, allowed hosts only)
 
-**Authorization & GitHub redirect (2 tests):**
+**Authorization & GitHub redirect:**
 - Authorize endpoint redirects to GitHub with correct parameters
 - Missing/invalid authorize parameters return 400
 
-**Session bridge (9 tests):**
+**Session bridge:**
 - Creates unique session per authorize request (different keys)
 - Session consumed on first callback (second callback returns 400)
 - Preserves original Claude `state` across GitHub redirect
@@ -58,29 +58,43 @@ Tests for the full OAuth 2.1 implementation with GitHub authentication (35 tests
 - Unknown session key → 400
 - GitHub error parameter → 400
 
-**Username allowlist (3 tests):**
+**Username allowlist:**
 - Case-insensitive username match allows access
 - Non-allowed username redirects with `error=access_denied`
 - Unit test: `isAllowedUser()` with various casings
 
-**GitHub API error handling (2 tests):**
+**GitHub API error handling:**
 - Token exchange failure returns 502
 - User info fetch failure returns 502
 
-**Full E2E flow (3 tests):**
+**Full E2E flow:**
 - Register → authorize → GitHub callback → token exchange → MCP request → refresh token
 - Auth code reuse prevention (one-time use)
 - JWT middleware (valid JWT accepted, invalid token rejected)
 
-**Token endpoint (1 test):**
+**Token endpoint:**
 - Unsupported grant type rejection
 
-**OAuthStore unit tests (3 tests):**
+**Public Client (token_endpoint_auth_method: "none"):**
+- Metadata advertises `none` as supported auth method
+- Registration with `none` returns no `client_secret`
+- Token exchange for public client succeeds without `client_secret` (PKCE only)
+- Refresh token grant for public client succeeds without `client_secret`
+- Token exchange rejects `client_secret` when sent for a public client
+- Token exchange rejects missing `client_secret` for a confidential client
+- Full E2E flow: public client register → authorize → callback → token → MCP → refresh
+
+**OAuthStore unit tests:**
+- Public client registration: no `clientSecret` generated
+- Confidential client registration: `clientSecret` generated
+- `authenticateClient`: public client accepts no secret, rejects secret
+- `authenticateClient`: confidential client accepts correct secret, rejects wrong/missing secret
+- `authenticateClient`: unknown `clientId` rejected
 - Fresh clients not evicted at capacity
 - Stale clients below threshold not evicted
 - Stale clients evicted at 90% capacity (cleanup frees registration slots)
 
-**OAuthSessionStore unit tests (4 tests):**
+**OAuthSessionStore unit tests:**
 - Create + consume returns session data
 - Consumed session cannot be reused (one-time use)
 - Unknown key returns null
@@ -92,31 +106,35 @@ Tests for the full OAuth 2.1 implementation with GitHub authentication (35 tests
 
 ### OAuth Full-Flow Integration (`tests/oauthFlow.integration.test.ts`)
 
-End-to-end integration tests that exercise the complete OAuth → MCP transport pipeline (10 tests):
+End-to-end integration tests that exercise the complete OAuth → MCP transport pipeline:
 
 **Setup:** Combines a real MCP server with registered tools, a full OAuth endpoint stack (registration, authorize, GitHub callback, token exchange), JWT auth middleware, and `StreamableHTTPServerTransport` sessions. GitHub API calls are mocked via `globalThis.fetch` override. A temporary vault with git repo is created for tool operations.
 
-**Full-flow tests (3 tests):**
+**Full-flow tests:**
 - OAuth → MCP `listTools` — verifies tool registration is visible through authenticated transport
 - OAuth → MCP `read_file` — verifies actual file I/O works through authenticated transport
 - Refresh token → new access token → MCP tool call succeeds
 
-**Token validation (3 tests):**
+**Token validation:**
 - Token response structure conforms to RFC 6749 (access_token, token_type, expires_in, refresh_token)
 - JWT payload contains required claims (sub, client_id, aud, iss, iat, exp)
 - Invalid/missing tokens cause MCP connection to fail with error
 
-**Edge cases (4 tests):**
+**Edge cases:**
 - Token endpoint rejects `application/json` Content-Type (documents potential Claude.ai issue: `express.urlencoded()` does not parse JSON bodies → server error)
 - Multiple concurrent MCP sessions with different OAuth tokens operate independently
 - Token is usable immediately after issuance (no timing delay)
 - Discovery endpoints (`.well-known/oauth-protected-resource` and `.well-known/oauth-authorization-server`) return correct metadata per RFC 9728 and RFC 8414
 
-**Key finding for Claude.ai debugging:** Test 7 confirms that if a client sends the token exchange request as `application/json` instead of `application/x-www-form-urlencoded`, the server fails because `express.urlencoded()` does not parse the JSON body.
+**Public Client integration:**
+- Public client full flow: OAuth (no secret) → MCP `listTools`
+- Public client refresh token → new access token → MCP tool call succeeds
+
+**Key finding for Claude.ai debugging:** One test confirms that if a client sends the token exchange request as `application/json` instead of `application/x-www-form-urlencoded`, the server fails because `express.urlencoded()` does not parse the JSON body.
 
 ### Guides & Prompts (`tests/guides.test.ts`)
 
-Tests for the vault guide tool and MCP prompts (11 tests):
+Tests for the vault guide tool and MCP prompts:
 - `get_obsidian_guide` with topic `conventions` returns conventions content
 - `get_obsidian_guide` with topic `search-strategy` returns search guide
 - `get_obsidian_guide` with topic `all` returns all guides concatenated

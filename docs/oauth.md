@@ -54,7 +54,8 @@ Claude.ai                        Server                         GitHub
   │                                │                              │
   │  POST /oauth/register          │                              │
   │  ─────────────────────────►    │                              │
-  │  ◄─────────────────────────    │  → client_id, client_secret  │
+  │  ◄─────────────────────────    │  → client_id (+secret if     │
+  │                                │    confidential)              │
   │                                │                              │
   │  GET /oauth/authorize          │                              │
   │  ?response_type=code           │                              │
@@ -114,6 +115,24 @@ The session key is passed to GitHub as the `state` parameter, allowing the serve
 | `src/oauth/jwt.ts` | JWT access token create/verify |
 | `src/oauth/store.ts` | In-memory client, code, token storage |
 
+## Public Client Support
+
+MCP clients (e.g. Claude Code CLI) are typically **public clients** that cannot securely store a client secret. The server supports `token_endpoint_auth_method: "none"` per the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/draft/basic/authorization).
+
+### How it works
+
+- **Registration**: A client may register with `"token_endpoint_auth_method": "none"`. The server will not generate or return a `client_secret` for such clients.
+- **Token exchange**: Public clients authenticate solely via PKCE (`code_verifier`). No `client_secret` is required or accepted.
+- **Refresh token**: Public clients provide only `client_id` + `refresh_token` — no secret.
+- **Confidential clients** (`client_secret_post`) continue to work as before with secret-based authentication.
+
+### Security considerations
+
+- Public clients rely entirely on PKCE for proof of legitimate authorization code possession
+- The server rejects `client_secret` if sent for a public client (prevents confusion attacks)
+- The server rejects missing `client_secret` for confidential clients (prevents downgrade)
+- Both auth methods are advertised in `/.well-known/oauth-authorization-server` metadata
+
 ## Security
 
 - **GitHub handles** brute-force protection, 2FA/passkeys, session management
@@ -126,6 +145,7 @@ The session key is passed to GitHub as the `state` parameter, allowing the serve
 - **JWT access tokens** signed with HS256 with audience/issuer validation
 - **GitHub token discarded** immediately after user info fetch (not stored)
 - **Session store** entries expire after 10 minutes and are consumed on first use
+- **Public client isolation** — public clients (`none`) cannot use a secret, confidential clients (`client_secret_post`) must provide one; the server enforces strict separation
 
 ## Environment Variables
 
