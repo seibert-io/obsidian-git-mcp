@@ -40,6 +40,14 @@ Typen: note, tip, warning, danger, info, question, quote, example, bug, success,
 Viele Vaults nutzen das Dataview-Plugin. Inline-Felder:
 key:: value
 
+## CLAUDE.md Instruktionen
+Dieser Vault kann CLAUDE.md-Dateien enthalten, die dir spezifische Anweisungen geben:
+
+- **Root-CLAUDE.md** (im Vault-Root): Wird automatisch bei Session-Start über die Server-Instructions geliefert. Du hast diese Anweisungen bereits erhalten, falls eine solche Datei existiert.
+- **Unterordner-CLAUDE.md**: Verzeichnisse können eigene CLAUDE.md-Dateien mit ordnerspezifischen Konventionen enthalten (z.B. Namenskonventionen, Vorlagen, Arbeitsweisen).
+
+**Wichtig:** Bevor du in einem bestimmten Unterordner arbeitest oder eine Datei in einem Unterordner liest/bearbeitest, rufe `get_claude_context` mit dem jeweiligen Verzeichnispfad auf, um ordnerspezifische Anweisungen zu laden. Beispiel: Vor der Arbeit in `projects/webapp/` → `get_claude_context` mit path `projects/webapp`.
+
 ## Best Practices
 - Atomare Notizen: eine Idee pro Notiz
 - Aussagekräftige Titel (werden als Link-Text verwendet)
