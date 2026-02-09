@@ -15,6 +15,7 @@ All configuration is via environment variables, parsed in `src/config.ts`.
 | `SERVER_DOMAIN` | yes (prod) | — | Domain for HTTPS via Caddy (e.g., `vault.example.com`) |
 | `GIT_BRANCH` | no | `main` | Branch to sync |
 | `GIT_SYNC_INTERVAL_SECONDS` | no | `300` | Auto-pull interval (0 to disable) |
+| `GIT_DEBOUNCE_SYNC_DELAY_SECONDS` | no | `10` | Debounce delay before committing/pushing after write operations (0 for immediate sync) |
 | `GIT_USER_NAME` | no | `Claude MCP` | Git commit author name |
 | `GIT_USER_EMAIL` | no | `mcp@example.com` | Git commit author email |
 | `VAULT_PATH` | no | `/vault` | Path to vault inside container |
@@ -53,6 +54,7 @@ GitHub OAuth credentials are obtained by creating an OAuth App at https://github
 - `ALLOWED_GITHUB_USERS` must contain at least one username (stored lowercase internally)
 - `JWT_SECRET` must be at least 32 characters
 - `GIT_SYNC_INTERVAL_SECONDS` must be a non-negative integer
+- `GIT_DEBOUNCE_SYNC_DELAY_SECONDS` must be a non-negative integer
 - `PORT` must be a valid port number (1-65535)
 - `GIT_BRANCH`, `GIT_USER_NAME`, `GIT_USER_EMAIL` must not start with `-` (prevents argument injection) and must not contain control characters (ASCII 0x00–0x1F, 0x7F)
 - `MAX_SESSIONS` must be a positive integer

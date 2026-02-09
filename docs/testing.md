@@ -191,6 +191,23 @@ Unit tests for `sanitizeCommitMessage()`:
 - Does not truncate messages at or below 200 characters
 - Leaves normal messages unchanged
 
+### Debounced Sync (`tests/debouncedSync.test.ts`)
+
+Unit tests for the debounced auto-sync mechanism (`src/git/debouncedSync.ts`):
+- Does not sync immediately when `scheduleSync` is called
+- Syncs after the debounce delay expires
+- Resets the timer when a new change arrives during the debounce window (debounce behavior)
+- Batches multiple changes into a single commit with combined message
+- Uses original message when only one change is pending
+- `flushDebouncedSync()` executes pending sync immediately (used for graceful shutdown)
+- `stopDebouncedSync()` cancels pending sync without executing (used in tests)
+- Handles sync errors gracefully and allows subsequent syncs
+- Queues another sync if changes arrive while a sync is already in progress
+- `flushDebouncedSync()` is a no-op when nothing is pending
+- Respects configurable debounce delay (`gitDebounceSyncDelaySeconds`)
+
+**Mocking strategy:** `stageCommitAndPush` from `gitSync.ts` is mocked. Vitest fake timers are used to control debounce timing.
+
 ### Batch Utilities (`tests/batchUtils.test.ts`)
 
 Unit tests for batch operation helpers (`validateBatchSize`, `formatBatchResults`):

@@ -13,6 +13,7 @@ import { registerFileOperations } from "../src/tools/fileOperations.js";
 import { registerDirectoryOps } from "../src/tools/directoryOps.js";
 import { registerSearchOperations } from "../src/tools/searchOperations.js";
 import { registerVaultOperations } from "../src/tools/vaultOperations.js";
+import { initDebouncedSync, stopDebouncedSync } from "../src/git/debouncedSync.js";
 import { createTestConfig } from "./helpers/testConfig.js";
 
 const TEST_VAULT = "/tmp/test-vault-integration";
@@ -40,7 +41,10 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     await mkdir(path.join(resolvedVault, ".claude", "skills"), { recursive: true });
     await writeFile(path.join(resolvedVault, ".claude", "skills", "test-skill.md"), "# Skill file\n");
 
-    // Initialize git repo with a local bare remote so commitAndPush works in write tests
+    // Initialize debounced sync for write tools
+    initDebouncedSync(testConfig);
+
+    // Initialize git repo with a local bare remote so stageCommitAndPush works in write tests
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
     const execFileAsync = promisify(execFile);
@@ -127,6 +131,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
   });
 
   afterAll(async () => {
+    stopDebouncedSync();
     await client?.close();
     httpServer?.close();
     await rm(TEST_VAULT, { recursive: true, force: true });

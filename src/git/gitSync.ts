@@ -168,7 +168,7 @@ export async function pullVault(config: Config): Promise<void> {
  * Stage all changes, commit with the given message, rebase-pull, and push.
  * Shared implementation for single and batch commits.
  */
-async function stageCommitAndPush(config: Config, message: string): Promise<void> {
+export async function stageCommitAndPush(config: Config, message: string): Promise<void> {
   const cwd = config.vaultPath;
 
   await git(["add", "."], cwd);
@@ -195,31 +195,6 @@ async function stageCommitAndPush(config: Config, message: string): Promise<void
 
   await git(["push", "origin", "--", config.gitBranch], cwd);
   lastSyncTimestamp = new Date();
-}
-
-/**
- * Commit and push changes after a single write operation.
- */
-export async function commitAndPush(
-  config: Config,
-  message: string,
-): Promise<void> {
-  logger.debug("Committing and pushing changes", { message });
-  await stageCommitAndPush(config, message);
-  logger.info("Changes committed and pushed", { message });
-}
-
-/**
- * Commit and push changes for a batch of file operations.
- * Uses a single commit for all changes instead of one per file.
- */
-export async function commitAndPushBatch(
-  config: Config,
-  paths: readonly string[],
-): Promise<void> {
-  logger.debug("Committing batch changes", { fileCount: paths.length });
-  await stageCommitAndPush(config, `MCP: batch update ${paths.length} files`);
-  logger.info("Batch changes committed and pushed", { fileCount: paths.length });
 }
 
 /**

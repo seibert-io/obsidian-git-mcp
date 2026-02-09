@@ -7,6 +7,7 @@ export function createTestConfig(overrides: Partial<Config> = {}): Config {
     gitRepoUrl: "https://example.com/repo.git",
     gitBranch: "main",
     gitSyncIntervalSeconds: 0,
+    gitDebounceSyncDelaySeconds: 10,
     gitUserName: "Test",
     gitUserEmail: "test@example.com",
     vaultPath: "/tmp/test-vault",
