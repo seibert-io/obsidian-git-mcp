@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/seibert-io/obsidian-github-mcp/compare/v1.0.0...v1.0.1) (2026-02-09)
+
+
+### Bug Fixes
+
+* unnecessary workflow permission ([7384a02](https://github.com/seibert-io/obsidian-github-mcp/commit/7384a0283b3d500a4f245d0ecd62005d4aabf092))
+
 # 1.0.0 (2026-02-09)
 
 
