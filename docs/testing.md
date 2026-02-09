@@ -36,7 +36,7 @@ End-to-end test that starts a real MCP server over Streamable HTTP (9 tests):
 
 ### OAuth (`tests/oauth.test.ts`)
 
-Tests for the full OAuth 2.1 implementation with GitHub authentication (30 tests):
+Tests for the full OAuth 2.1 implementation with GitHub authentication (35 tests):
 
 **Server metadata & registration (3 tests):**
 - Server metadata endpoint returns correct RFC 8414 data
@@ -75,6 +75,11 @@ Tests for the full OAuth 2.1 implementation with GitHub authentication (30 tests
 **Token endpoint (1 test):**
 - Unsupported grant type rejection
 
+**OAuthStore unit tests (3 tests):**
+- Fresh clients not evicted at capacity
+- Stale clients below threshold not evicted
+- Stale clients evicted at 90% capacity (cleanup frees registration slots)
+
 **OAuthSessionStore unit tests (4 tests):**
 - Create + consume returns session data
 - Consumed session cannot be reused (one-time use)
@@ -84,6 +89,30 @@ Tests for the full OAuth 2.1 implementation with GitHub authentication (30 tests
 **Mocking strategy:** GitHub API calls (`github.com/login/oauth/access_token` and `api.github.com/user`) are intercepted via `globalThis.fetch` override. Local test server requests pass through to the original fetch. No real HTTP requests leave the test process.
 
 **Rate limit handling:** A shared client is registered once in `beforeAll` and reused across all tests to stay within the DCR rate limit (10/min per IP).
+
+### OAuth Full-Flow Integration (`tests/oauthFlow.integration.test.ts`)
+
+End-to-end integration tests that exercise the complete OAuth → MCP transport pipeline (10 tests):
+
+**Setup:** Combines a real MCP server with registered tools, a full OAuth endpoint stack (registration, authorize, GitHub callback, token exchange), JWT auth middleware, and `StreamableHTTPServerTransport` sessions. GitHub API calls are mocked via `globalThis.fetch` override. A temporary vault with git repo is created for tool operations.
+
+**Full-flow tests (3 tests):**
+- OAuth → MCP `listTools` — verifies tool registration is visible through authenticated transport
+- OAuth → MCP `read_file` — verifies actual file I/O works through authenticated transport
+- Refresh token → new access token → MCP tool call succeeds
+
+**Token validation (3 tests):**
+- Token response structure conforms to RFC 6749 (access_token, token_type, expires_in, refresh_token)
+- JWT payload contains required claims (sub, client_id, aud, iss, iat, exp)
+- Invalid/missing tokens cause MCP connection to fail with error
+
+**Edge cases (4 tests):**
+- Token endpoint rejects `application/json` Content-Type (documents potential Claude.ai issue: `express.urlencoded()` does not parse JSON bodies → server error)
+- Multiple concurrent MCP sessions with different OAuth tokens operate independently
+- Token is usable immediately after issuance (no timing delay)
+- Discovery endpoints (`.well-known/oauth-protected-resource` and `.well-known/oauth-authorization-server`) return correct metadata per RFC 9728 and RFC 8414
+
+**Key finding for Claude.ai debugging:** Test 7 confirms that if a client sends the token exchange request as `application/json` instead of `application/x-www-form-urlencoded`, the server fails because `express.urlencoded()` does not parse the JSON body.
 
 ### Guides & Prompts (`tests/guides.test.ts`)
 

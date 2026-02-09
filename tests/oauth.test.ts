@@ -15,84 +15,20 @@ import { OAuthStore } from "../src/oauth/store.js";
 import { OAuthSessionStore } from "../src/oauth/sessionStore.js";
 import { RateLimiter } from "../src/utils/rateLimiter.js";
 import { isAllowedUser } from "../src/oauth/allowlist.js";
-import type { Config } from "../src/config.js";
+import { createTestConfig } from "./helpers/testConfig.js";
+import {
+  installGitHubMock,
+  uninstallGitHubMock,
+  resetGitHubMock,
+  setMockGitHubTokenResponse,
+  setMockGitHubUserResponse,
+} from "./helpers/mockGitHub.js";
+import { startAuthorizeFlow, completeCallback } from "./helpers/oauthHelpers.js";
 
-// --- Mock GitHub HTTP calls ---
-let mockGitHubTokenResponse: object = {};
-let mockGitHubUserResponse: object = {};
-let mockGitHubTokenStatus = 200;
-let mockGitHubUserStatus = 200;
-
-const originalFetch = globalThis.fetch;
-globalThis.fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-  const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-
-  if (url === "https://github.com/login/oauth/access_token") {
-    return new Response(JSON.stringify(mockGitHubTokenResponse), {
-      status: mockGitHubTokenStatus,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-  if (url === "https://api.github.com/user") {
-    return new Response(JSON.stringify(mockGitHubUserResponse), {
-      status: mockGitHubUserStatus,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  return originalFetch(input, init);
-};
-
-const testConfig: Config = {
-  gitRepoUrl: "https://example.com/repo.git",
-  gitBranch: "main",
-  gitSyncIntervalSeconds: 0,
-  gitUserName: "Test",
-  gitUserEmail: "test@example.com",
+const testConfig = createTestConfig({
   vaultPath: "/tmp/test-vault-oauth",
-  port: 0,
-  logLevel: "error",
-  jwtSecret: "test-jwt-secret-that-is-at-least-32-chars-long",
-  serverUrl: "",
-  accessTokenExpirySeconds: 3600,
-  refreshTokenExpirySeconds: 604800,
-  githubClientId: "test-github-client-id",
-  githubClientSecret: "test-github-client-secret",
   allowedGithubUsers: ["alloweduser", "anotheruser"],
-  trustProxy: false,
-  promptsDir: "prompts",
-};
-
-// Helper: start authorize flow and extract session key from GitHub redirect
-async function startAuthorizeFlow(baseUrl: string, clientId: string, codeChallenge: string, state = "test-state") {
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: clientId,
-    redirect_uri: "https://claude.ai/oauth/callback",
-    state,
-    code_challenge: codeChallenge,
-    code_challenge_method: "S256",
-  });
-
-  const res = await fetch(`${baseUrl}/oauth/authorize?${params}`, { redirect: "manual" });
-  expect(res.status).toBe(302);
-  const location = res.headers.get("location")!;
-  expect(location).toContain("github.com/login/oauth/authorize");
-
-  const redirectUrl = new URL(location);
-  const sessionKey = redirectUrl.searchParams.get("state")!;
-  expect(sessionKey).toBeDefined();
-  expect(sessionKey.length).toBe(64);
-  return { sessionKey, location };
-}
-
-// Helper: complete a full callback cycle, returning the auth code
-async function completeCallback(baseUrl: string, sessionKey: string, ghCode = "gh_code") {
-  const res = await fetch(`${baseUrl}/oauth/github/callback?code=${ghCode}&state=${sessionKey}`, { redirect: "manual" });
-  expect(res.status).toBe(302);
-  const location = res.headers.get("location")!;
-  return { location, authCode: new URL(location).searchParams.get("code")! };
-}
+});
 
 describe("OAuth 2.1 with GitHub Authentication", () => {
   let httpServer: Server;
@@ -107,6 +43,8 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
   const tokenRateLimiter = new RateLimiter(20, 60_000);
 
   beforeAll(async () => {
+    installGitHubMock();
+
     const app = express();
 
     app.get("/.well-known/oauth-protected-resource", handleProtectedResource(testConfig));
@@ -139,15 +77,12 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
   });
 
   beforeEach(() => {
-    mockGitHubTokenResponse = { access_token: "gh_mock_token", token_type: "bearer", scope: "read:user" };
-    mockGitHubUserResponse = { login: "AllowedUser", id: 12345 };
-    mockGitHubTokenStatus = 200;
-    mockGitHubUserStatus = 200;
+    resetGitHubMock();
   });
 
   afterAll(() => {
     httpServer?.close();
-    globalThis.fetch = originalFetch;
+    uninstallGitHubMock();
   });
 
   // ----- Core OAuth Endpoints -----
@@ -365,7 +300,7 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
 
   it("allows user in allowlist (case-insensitive)", async () => {
     const codeChallenge = crypto.createHash("sha256").update("v").digest("base64url");
-    mockGitHubUserResponse = { login: "AllowedUser", id: 12345 }; // mixed case
+    setMockGitHubUserResponse({ login: "AllowedUser", id: 12345 });
 
     const { sessionKey } = await startAuthorizeFlow(baseUrl, sharedClient.client_id, codeChallenge);
     const res = await fetch(`${baseUrl}/oauth/github/callback?code=gc&state=${sessionKey}`, { redirect: "manual" });
@@ -376,7 +311,7 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
 
   it("rejects user NOT in allowlist with redirect error", async () => {
     const codeChallenge = crypto.createHash("sha256").update("v").digest("base64url");
-    mockGitHubUserResponse = { login: "EvilHacker", id: 99999 };
+    setMockGitHubUserResponse({ login: "EvilHacker", id: 99999 });
 
     const { sessionKey } = await startAuthorizeFlow(baseUrl, sharedClient.client_id, codeChallenge);
     const res = await fetch(`${baseUrl}/oauth/github/callback?code=gc&state=${sessionKey}`, { redirect: "manual" });
@@ -402,7 +337,7 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
 
   it("handles GitHub token exchange failure", async () => {
     const codeChallenge = crypto.createHash("sha256").update("v").digest("base64url");
-    mockGitHubTokenResponse = { error: "bad_verification_code", error_description: "The code has expired" };
+    setMockGitHubTokenResponse({ error: "bad_verification_code", error_description: "The code has expired" });
 
     const { sessionKey } = await startAuthorizeFlow(baseUrl, sharedClient.client_id, codeChallenge);
     const res = await fetch(`${baseUrl}/oauth/github/callback?code=bad&state=${sessionKey}`, { redirect: "manual" });
@@ -412,7 +347,7 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
 
   it("handles GitHub user info failure", async () => {
     const codeChallenge = crypto.createHash("sha256").update("v").digest("base64url");
-    mockGitHubUserStatus = 401;
+    setMockGitHubUserResponse({}, 401);
 
     const { sessionKey } = await startAuthorizeFlow(baseUrl, sharedClient.client_id, codeChallenge);
     const res = await fetch(`${baseUrl}/oauth/github/callback?code=gc&state=${sessionKey}`, { redirect: "manual" });
@@ -424,7 +359,7 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
   it("completes full flow: register → authorize → GitHub → callback → token → MCP", async () => {
     const codeVerifier = crypto.randomBytes(32).toString("hex");
     const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url");
-    mockGitHubUserResponse = { login: "AnotherUser", id: 67890 };
+    setMockGitHubUserResponse({ login: "AnotherUser", id: 67890 });
 
     // Authorize → GitHub redirect
     const { sessionKey } = await startAuthorizeFlow(baseUrl, sharedClient.client_id, codeChallenge, "e2e-state");
@@ -560,6 +495,77 @@ describe("OAuth 2.1 with GitHub Authentication", () => {
     });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe("unsupported_grant_type");
+  });
+});
+
+// ----- OAuthStore Unit Tests -----
+
+describe("OAuthStore", () => {
+  it("cleanup does not evict fresh clients even at capacity", () => {
+    const store = new OAuthStore();
+
+    // Fill store to capacity — all clients are fresh (registered now)
+    for (let i = 0; i < 500; i++) {
+      store.registerClient(`client-${i}`, ["https://claude.ai/oauth/callback"], ["authorization_code"], ["code"], "client_secret_post");
+    }
+    expect(store.clientCount()).toBe(500);
+
+    // Cleanup should not evict any fresh clients
+    store.cleanup();
+    expect(store.clientCount()).toBe(500);
+  });
+
+  it("cleanup skips client eviction when below capacity threshold", () => {
+    const store = new OAuthStore();
+    const CLIENT_STALENESS_MS = 24 * 60 * 60 * 1000;
+    const baseTime = 1_000_000_000_000;
+    const originalNow = Date.now;
+
+    try {
+      // Register a stale client
+      Date.now = () => baseTime;
+      store.registerClient("old-client", ["https://claude.ai/oauth/callback"], ["authorization_code"], ["code"], "client_secret_post");
+
+      // Only 1 client — well below 90% threshold of 500
+      Date.now = () => baseTime + CLIENT_STALENESS_MS + 1;
+      store.cleanup();
+      // Should NOT evict because we're below the capacity threshold
+      expect(store.clientCount()).toBe(1);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
+  it("cleanup removes clients older than staleness threshold when at capacity", () => {
+    const store = new OAuthStore();
+    const CLIENT_STALENESS_MS = 24 * 60 * 60 * 1000;
+    const baseTime = 1_000_000_000_000; // fixed base timestamp
+    const originalNow = Date.now;
+
+    try {
+      // Register one "old" client at baseTime
+      Date.now = () => baseTime;
+      store.registerClient("old-client", ["https://claude.ai/oauth/callback"], ["authorization_code"], ["code"], "client_secret_post");
+      expect(store.clientCount()).toBe(1);
+
+      // Register 449 "fresh" clients at baseTime + STALENESS (not yet stale)
+      Date.now = () => baseTime + CLIENT_STALENESS_MS;
+      for (let i = 0; i < 449; i++) {
+        store.registerClient(`filler-${i}`, ["https://claude.ai/oauth/callback"], ["authorization_code"], ["code"], "client_secret_post");
+      }
+      expect(store.clientCount()).toBe(450);
+
+      // Advance time so old-client is stale but fillers are not
+      // old-client: registered at baseTime, age = STALENESS + 1 → stale
+      // fillers: registered at baseTime + STALENESS, age = 1 → fresh
+      Date.now = () => baseTime + CLIENT_STALENESS_MS + 1;
+
+      // Below threshold (450/500 = 90%) — stale clients should be evicted
+      store.cleanup();
+      expect(store.clientCount()).toBe(449); // old-client removed
+    } finally {
+      Date.now = originalNow;
+    }
   });
 });
 

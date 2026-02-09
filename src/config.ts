@@ -109,7 +109,7 @@ export function loadConfig(): Config {
     throw new Error("REFRESH_TOKEN_EXPIRY_SECONDS must be a positive number");
   }
 
-  const trustProxy = (process.env.TRUST_PROXY ?? "true").toLowerCase() !== "false";
+  const trustProxy = (process.env.TRUST_PROXY ?? "false").toLowerCase() === "true";
 
   return {
     gitRepoUrl,

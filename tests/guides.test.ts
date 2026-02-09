@@ -11,10 +11,10 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { registerGuideOperations } from "../src/tools/guideOperations.js";
 import { registerPrompts } from "../src/prompts/promptHandler.js";
-import type { Config } from "../src/config.js";
+import { createTestConfig } from "./helpers/testConfig.js";
 
 const TEST_PROMPTS = "/tmp/test-prompts-guides";
-const testConfig = { promptsDir: TEST_PROMPTS } as Config;
+const testConfig = createTestConfig({ promptsDir: TEST_PROMPTS });
 
 describe("Guide Tool and MCP Prompts", () => {
   let httpServer: Server;

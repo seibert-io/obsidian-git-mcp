@@ -44,7 +44,7 @@ Path validation errors throw `PathValidationError`, which tool handlers catch an
 
 ## Reverse Proxy (`trust proxy`)
 
-When `TRUST_PROXY=true` (default), Express is configured with `app.set("trust proxy", 1)` to trust the first reverse proxy (Caddy). This ensures `req.ip` returns the real client IP (from `X-Forwarded-For`) instead of Caddy's Docker-internal IP, which is essential for per-client rate limiting. Set `TRUST_PROXY=false` when exposing the server directly without a reverse proxy.
+When `TRUST_PROXY=true`, Express is configured with `app.set("trust proxy", 1)` to trust the first reverse proxy (Caddy). This ensures `req.ip` returns the real client IP (from `X-Forwarded-For`) instead of Caddy's Docker-internal IP, which is essential for per-client rate limiting. The default is `false` — set to `true` only when behind a reverse proxy (e.g., Caddy in production). The production `docker-compose.prod.yml` sets `TRUST_PROXY=true` explicitly.
 
 ## Security Headers (Caddy)
 
@@ -62,7 +62,7 @@ All responses include `Access-Control-Allow-Origin: *` so that any MCP client (w
 ## Rate Limiting
 
 - OAuth session store: 1000 max pending sessions, 10-minute TTL, one-time use
-- Client registration: 10 per minute per IP, 500 max clients
+- Client registration: 10 per minute per IP, 500 max clients, stale clients (>24h) evicted at 90% capacity
 - Token endpoint requests: 20 per minute per IP
 - Session limit: 100 concurrent MCP sessions
 - Session TTL: 30 minutes of inactivity

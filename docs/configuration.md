@@ -22,7 +22,7 @@ All configuration is via environment variables, parsed in `src/config.ts`.
 | `LOG_LEVEL` | no | `info` | Logging verbosity: debug, info, warn, error |
 | `ACCESS_TOKEN_EXPIRY_SECONDS` | no | `3600` | JWT access token lifetime in seconds |
 | `REFRESH_TOKEN_EXPIRY_SECONDS` | no | `604800` | Refresh token lifetime (default 7 days) |
-| `TRUST_PROXY` | no | `true` | Trust `X-Forwarded-For` header for rate limiting. Set to `false` when not behind a reverse proxy |
+| `TRUST_PROXY` | no | `false` | Trust `X-Forwarded-For` header for rate limiting. Set to `true` when behind a reverse proxy (e.g., Caddy) |
 | `PROMPTS_DIR` | no | `<cwd>/prompts` | Directory containing guide/prompt markdown files (overridable for custom prompts) |
 
 ## Private Repository Access

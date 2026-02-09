@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 
 const MAX_AUTH_CODES = 1000;
 const MAX_REFRESH_TOKENS = 2000;
+const CLIENT_STALENESS_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CLIENT_CLEANUP_THRESHOLD = 0.9; // evict stale clients when at 90% capacity
 
 export interface RegisteredClient {
   clientId: string;
@@ -11,6 +13,7 @@ export interface RegisteredClient {
   grantTypes: string[];
   responseTypes: string[];
   tokenEndpointAuthMethod: string;
+  registeredAt: number;
 }
 
 export interface AuthorizationCode {
@@ -49,6 +52,7 @@ export class OAuthStore {
       grantTypes,
       responseTypes,
       tokenEndpointAuthMethod,
+      registeredAt: Date.now(),
     };
     this.clients.set(client.clientId, client);
     return client;
@@ -131,13 +135,21 @@ export class OAuthStore {
 
   // --- Cleanup ---
 
-  cleanup(): void {
+  cleanup(maxClients = 500): void {
     const now = Date.now();
     for (const [code, entry] of this.authCodes) {
       if (now > entry.expiresAt) this.authCodes.delete(code);
     }
     for (const [token, entry] of this.refreshTokens) {
       if (now > entry.expiresAt) this.refreshTokens.delete(token);
+    }
+    // Evict stale clients when nearing capacity to free registration slots
+    if (this.clients.size >= maxClients * CLIENT_CLEANUP_THRESHOLD) {
+      for (const [id, client] of this.clients) {
+        if (now - client.registeredAt > CLIENT_STALENESS_MS) {
+          this.clients.delete(id);
+        }
+      }
     }
   }
 }

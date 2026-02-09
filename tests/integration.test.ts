@@ -5,7 +5,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import express from "express";
 import crypto from "node:crypto";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -13,28 +13,11 @@ import { registerFileOperations } from "../src/tools/fileOperations.js";
 import { registerDirectoryOps } from "../src/tools/directoryOps.js";
 import { registerSearchOperations } from "../src/tools/searchOperations.js";
 import { registerVaultOperations } from "../src/tools/vaultOperations.js";
-import type { Config } from "../src/config.js";
+import { createTestConfig } from "./helpers/testConfig.js";
 
 const TEST_VAULT = "/tmp/test-vault-integration";
 
-// Create a config that skips git operations by pointing to a non-git dir
-const testConfig: Config = {
-  gitRepoUrl: "https://example.com/repo.git",
-  gitBranch: "main",
-  gitSyncIntervalSeconds: 0,
-  gitUserName: "Test",
-  gitUserEmail: "test@example.com",
-  vaultPath: TEST_VAULT,
-  port: 0,
-  logLevel: "error",
-  jwtSecret: "test-jwt-secret-that-is-at-least-32-chars-long",
-  serverUrl: "http://localhost:3000",
-  accessTokenExpirySeconds: 3600,
-  refreshTokenExpirySeconds: 604800,
-  githubClientId: "test-github-client-id",
-  githubClientSecret: "test-github-client-secret",
-  allowedGithubUsers: ["testuser"],
-};
+const testConfig = createTestConfig({ vaultPath: TEST_VAULT });
 
 describe("Integration: MCP Server over Streamable HTTP", () => {
   let httpServer: Server;
@@ -44,20 +27,25 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
   beforeAll(async () => {
     // Prepare test vault
     await mkdir(TEST_VAULT, { recursive: true });
-    await writeFile(path.join(TEST_VAULT, "hello.md"), "# Hello World\n\nThis is a test note.\n\n#test #example\n");
-    await mkdir(path.join(TEST_VAULT, "subfolder"), { recursive: true });
-    await writeFile(path.join(TEST_VAULT, "subfolder", "nested.md"), "Nested note with [[hello]] link.\n");
+
+    // Resolve symlinks (macOS /tmp → /private/tmp) so path validation passes
+    const resolvedVault = await realpath(TEST_VAULT);
+    testConfig.vaultPath = resolvedVault;
+
+    await writeFile(path.join(resolvedVault, "hello.md"), "# Hello World\n\nThis is a test note.\n\n#test #example\n");
+    await mkdir(path.join(resolvedVault, "subfolder"), { recursive: true });
+    await writeFile(path.join(resolvedVault, "subfolder", "nested.md"), "Nested note with [[hello]] link.\n");
 
     // Initialize git repo so commitAndPush works in write tests
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
     const execFileAsync = promisify(execFile);
-    await execFileAsync("git", ["init"], { cwd: TEST_VAULT });
-    await execFileAsync("git", ["config", "user.name", "Test"], { cwd: TEST_VAULT });
-    await execFileAsync("git", ["config", "user.email", "test@test.com"], { cwd: TEST_VAULT });
-    await execFileAsync("git", ["config", "commit.gpgsign", "false"], { cwd: TEST_VAULT });
-    await execFileAsync("git", ["add", "."], { cwd: TEST_VAULT });
-    await execFileAsync("git", ["commit", "-m", "init"], { cwd: TEST_VAULT });
+    await execFileAsync("git", ["init"], { cwd: resolvedVault });
+    await execFileAsync("git", ["config", "user.name", "Test"], { cwd: resolvedVault });
+    await execFileAsync("git", ["config", "user.email", "test@test.com"], { cwd: resolvedVault });
+    await execFileAsync("git", ["config", "commit.gpgsign", "false"], { cwd: resolvedVault });
+    await execFileAsync("git", ["add", "."], { cwd: resolvedVault });
+    await execFileAsync("git", ["commit", "-m", "init"], { cwd: resolvedVault });
 
     // Create MCP server
     const mcpServer = new McpServer({

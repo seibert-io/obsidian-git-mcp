@@ -20,6 +20,7 @@ services:
       - "3000"
     environment:
       - SERVER_URL=https://${SERVER_DOMAIN}
+      - TRUST_PROXY=true
     env_file: .env
     restart: unless-stopped
 
