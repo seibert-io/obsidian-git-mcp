@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { sanitizeCommitMessage, git, buildGitEnv } from "../src/git/gitSync.js";
+import { sanitizeCommitMessage, git, sanitizeGitEnv, SECRETS_TO_STRIP } from "../src/git/gitSync.js";
 
 // Mock always succeeds — tests verify env passing, not actual git execution
 vi.mock("node:child_process", () => ({
@@ -8,20 +8,12 @@ vi.mock("node:child_process", () => ({
   }),
 }));
 
-const SECRET_KEYS = [
-  "JWT_SECRET",
-  "GITHUB_CLIENT_ID",
-  "GITHUB_CLIENT_SECRET",
-  "ALLOWED_GITHUB_USERS",
-  "GIT_REPO_URL",
-] as const;
-
-describe("buildGitEnv", () => {
+describe("sanitizeGitEnv", () => {
   let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(() => {
     originalEnv = { ...process.env };
-    for (const key of SECRET_KEYS) {
+    for (const key of SECRETS_TO_STRIP) {
       process.env[key] = `test-value-for-${key}`;
     }
   });
@@ -31,9 +23,9 @@ describe("buildGitEnv", () => {
   });
 
   it("strips all application secrets from the environment", () => {
-    const env = buildGitEnv();
+    const env = sanitizeGitEnv();
 
-    for (const key of SECRET_KEYS) {
+    for (const key of SECRETS_TO_STRIP) {
       expect(env).not.toHaveProperty(key);
     }
   });
@@ -41,7 +33,7 @@ describe("buildGitEnv", () => {
   it("preserves non-secret environment variables like HTTP_PROXY", () => {
     process.env.HTTP_PROXY = "http://proxy:8080";
 
-    const env = buildGitEnv();
+    const env = sanitizeGitEnv();
 
     expect(env.PATH).toBe(process.env.PATH);
     expect(env.HOME).toBe(process.env.HOME);
@@ -49,15 +41,15 @@ describe("buildGitEnv", () => {
   });
 
   it("sets GIT_TERMINAL_PROMPT to 0", () => {
-    const env = buildGitEnv();
+    const env = sanitizeGitEnv();
 
     expect(env.GIT_TERMINAL_PROMPT).toBe("0");
   });
 
   it("does not mutate process.env", () => {
-    buildGitEnv();
+    sanitizeGitEnv();
 
-    for (const key of SECRET_KEYS) {
+    for (const key of SECRETS_TO_STRIP) {
       expect(process.env[key]).toBe(`test-value-for-${key}`);
     }
   });

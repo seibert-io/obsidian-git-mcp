@@ -3,6 +3,7 @@ import { setLogLevel, logger } from "./utils/logger.js";
 import { initializeVault, startPeriodicSync, stopPeriodicSync } from "./git/gitSync.js";
 import { createMcpServer } from "./server.js";
 import { startHttpServer } from "./transport.js";
+import { getErrorMessage } from "./utils/toolResponse.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -37,8 +38,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  logger.error("Fatal error", {
-    error: error instanceof Error ? error.message : String(error),
-  });
+  logger.error("Fatal error", { error: getErrorMessage(error) });
   process.exit(1);
 });

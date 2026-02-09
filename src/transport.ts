@@ -1,4 +1,5 @@
 import express from "express";
+import type { Request, Response, NextFunction } from "express";
 import crypto from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -14,6 +15,16 @@ import { OAuthSessionStore } from "./oauth/sessionStore.js";
 import { RateLimiter } from "./utils/rateLimiter.js";
 import { logger } from "./utils/logger.js";
 import type { Config } from "./config.js";
+
+function rateLimitMiddleware(limiter: RateLimiter) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!limiter.check(req.ip ?? "unknown")) {
+      res.status(429).json({ error: "too_many_requests" });
+      return;
+    }
+    next();
+  };
+}
 
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -62,6 +73,7 @@ export async function startHttpServer(
   const oauthSessionStore = new OAuthSessionStore();
   const registrationRateLimiter = new RateLimiter(10, 60_000);
   const tokenRateLimiter = new RateLimiter(20, 60_000);
+  const mcpRateLimiter = new RateLimiter(100, 60_000);
 
   // --- Discovery endpoints (no auth required) ---
   app.get("/.well-known/oauth-protected-resource", handleProtectedResource(config));
@@ -73,8 +85,9 @@ export async function startHttpServer(
   app.get("/oauth/github/callback", handleGitHubCallback(config, oauthSessionStore, oauthStore));
   app.post("/oauth/token", express.urlencoded({ extended: false }), handleToken(config, oauthStore, tokenRateLimiter));
 
-  // Auth middleware for all /mcp routes (OAuth 2.1 JWT only)
+  // Auth + rate limiting middleware for all /mcp routes
   app.use("/mcp", jwtAuth(config.jwtSecret, config.serverUrl));
+  app.use("/mcp", rateLimitMiddleware(mcpRateLimiter));
 
   // Health check endpoint (no auth required)
   app.get("/health", (_req, res) => {
@@ -99,6 +112,7 @@ export async function startHttpServer(
     oauthSessionStore.cleanup();
     registrationRateLimiter.cleanup();
     tokenRateLimiter.cleanup();
+    mcpRateLimiter.cleanup();
   }, 60_000);
 
   // Handle POST requests to /mcp (main MCP endpoint)

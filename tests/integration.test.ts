@@ -5,7 +5,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import express from "express";
 import crypto from "node:crypto";
-import { mkdir, writeFile, rm, realpath } from "node:fs/promises";
+import { mkdir, writeFile, rm, realpath, symlink } from "node:fs/promises";
 import path from "node:path";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -168,6 +168,28 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
     expect(text).toContain("hello.md");
     expect(text).toContain("subfolder/");
+  });
+
+  it("excludes symlinks pointing outside vault from directory listing", async () => {
+    const outsideDir = testConfig.vaultPath + "-outside";
+    await mkdir(outsideDir, { recursive: true });
+    await writeFile(path.join(outsideDir, "secret.txt"), "should not appear");
+
+    const symlinkPath = path.join(testConfig.vaultPath, "escape-link");
+    try {
+      await symlink(outsideDir, symlinkPath, "dir");
+
+      const result = await client.callTool({
+        name: "list_directory",
+        arguments: { path: ".", recursive: true },
+      });
+      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      expect(text).not.toContain("escape-link");
+      expect(text).not.toContain("secret.txt");
+    } finally {
+      await rm(symlinkPath, { force: true });
+      await rm(outsideDir, { recursive: true, force: true });
+    }
   });
 
   it("searches files by pattern", async () => {

@@ -3,6 +3,7 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import type { Config } from "../config.js";
 import { logger } from "../utils/logger.js";
+import { getErrorMessage } from "../utils/toolResponse.js";
 
 const GIT_TIMEOUT_MS = 30_000;
 const GIT_MAX_BUFFER = 2 * 1024 * 1024; // 2 MiB
@@ -33,7 +34,7 @@ export function sanitizeCommitMessage(message: string): string {
  * Git hooks or malicious remotes could exfiltrate environment variables,
  * so we strip all application secrets before spawning git.
  */
-const SECRETS_TO_STRIP = [
+export const SECRETS_TO_STRIP = [
   "JWT_SECRET",
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
@@ -48,7 +49,7 @@ const SECRETS_TO_STRIP = [
  * variables it may need — PATH, HOME, HTTP_PROXY, GIT_SSH_COMMAND, etc.)
  * but explicitly strips application secrets that git does not need.
  */
-export function buildGitEnv(): NodeJS.ProcessEnv {
+export function sanitizeGitEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
   for (const key of SECRETS_TO_STRIP) {
     delete env[key];
@@ -65,7 +66,7 @@ export function git(
     execFile(
       "git",
       args,
-      { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: buildGitEnv() },
+      { cwd, timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER, env: sanitizeGitEnv() },
       (error, stdout, stderr) => {
         if (error) {
           reject(
@@ -157,7 +158,7 @@ export async function pullVault(config: Config): Promise<void> {
     logger.debug("Pull completed successfully");
   } catch (error) {
     logger.error("Pull failed", {
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     });
     throw error;
   }
@@ -188,7 +189,7 @@ async function stageCommitAndPush(config: Config, message: string): Promise<void
     await git(["pull", "--rebase", "origin", "--", config.gitBranch], cwd);
   } catch (error) {
     logger.error("Pre-push pull failed, attempting push anyway", {
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     });
   }
 
@@ -240,7 +241,7 @@ export function startPeriodicSync(config: Config): void {
       await pullVault(config);
     } catch (error) {
       logger.error("Periodic sync failed", {
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
       });
     }
   }, intervalMs);

@@ -3,7 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
-import { resolveVaultPathSafe } from "../utils/pathValidation.js";
+import { resolveVaultPathSafe, isInsideVault } from "../utils/pathValidation.js";
 import { validateBatchSize, formatBatchResults, MAX_BATCH_SIZE } from "../utils/batchUtils.js";
 import type { BatchResult } from "../utils/batchUtils.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
@@ -27,13 +27,18 @@ async function listRecursive(
   for (const item of items) {
     if (isHiddenDirectory(item.name)) continue;
 
-    const relativePath = path.relative(vaultPath, path.join(dirPath, item.name));
+    const fullPath = path.join(dirPath, item.name);
+    const relativePath = path.relative(vaultPath, fullPath);
+
+    if (!(await isInsideVault(fullPath, vaultPath))) {
+      continue;
+    }
 
     if (item.isDirectory()) {
       entries.push({ name: relativePath + "/", type: "directory" });
       if (currentDepth < maxDepth) {
         const children = await listRecursive(
-          path.join(dirPath, item.name),
+          fullPath,
           vaultPath,
           currentDepth + 1,
           maxDepth,
@@ -59,14 +64,24 @@ async function listDirectoryEntries(
   }
 
   const items = await readdir(resolved, { withFileTypes: true });
-  return items
-    .filter((item) => !isHiddenDirectory(item.name))
-    .map((item) => ({
-      name: item.isDirectory()
-        ? path.relative(vaultPath, path.join(resolved, item.name)) + "/"
-        : path.relative(vaultPath, path.join(resolved, item.name)),
-      type: item.isDirectory() ? ("directory" as const) : ("file" as const),
-    }));
+  const entries: DirEntry[] = [];
+  for (const item of items) {
+    if (isHiddenDirectory(item.name)) continue;
+    const fullPath = path.join(resolved, item.name);
+    if (!(await isInsideVault(fullPath, vaultPath))) continue;
+    if (item.isDirectory()) {
+      entries.push({
+        name: path.relative(vaultPath, fullPath) + "/",
+        type: "directory",
+      });
+    } else {
+      entries.push({
+        name: path.relative(vaultPath, fullPath),
+        type: "file",
+      });
+    }
+  }
+  return entries;
 }
 
 function formatEntries(entries: readonly DirEntry[]): string {

@@ -84,6 +84,20 @@ export async function resolveVaultPathSafe(vaultPath: string, filePath: string):
   return resolved;
 }
 
+/**
+ * Check whether a target path (after symlink resolution) is inside the vault.
+ * Returns false if the path does not exist or resolves outside the vault boundary.
+ */
+export async function isInsideVault(targetPath: string, vaultPath: string): Promise<boolean> {
+  try {
+    const real = await realpath(targetPath);
+    const normalizedVault = path.resolve(vaultPath);
+    return real.startsWith(normalizedVault + path.sep) || real === normalizedVault;
+  } catch {
+    return false;
+  }
+}
+
 export class PathValidationError extends Error {
   constructor(message: string) {
     super(message);

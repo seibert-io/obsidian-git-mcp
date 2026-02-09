@@ -36,7 +36,7 @@ All file paths are validated by `resolveVaultPath()` (sync) and `resolveVaultPat
 - Absolute paths outside vault — rejected
 - `.git/` and `.claude/` and their subdirectories — rejected (all path components checked against `HIDDEN_DIRECTORIES`)
 - `.gitmodules`, `.gitattributes`, etc. at vault root — rejected
-- Symlinks that escape the vault — rejected by `resolveVaultPathSafe()`
+- Symlinks that escape the vault — rejected by `resolveVaultPathSafe()` and by `isInsideVault()` (shared utility in `src/utils/pathValidation.ts`) in directory listings
 
 ### Hidden Directories
 
@@ -68,6 +68,7 @@ All responses include `Access-Control-Allow-Origin: *` so that any MCP client (w
 
 ## Rate Limiting
 
+- **MCP endpoint**: 100 requests per minute per IP, applied as middleware to all `/mcp` routes (POST, GET, DELETE)
 - OAuth session store: 1000 max pending sessions, 10-minute TTL, one-time use
 - Client registration: 10 per minute per IP, 500 max clients, stale clients (>24h) evicted at 90% capacity
 - Token endpoint requests: 20 per minute per IP
@@ -110,6 +111,10 @@ The vault can contain `CLAUDE.md` files that provide instructions to connected L
 **Trust assumption:** CLAUDE.md content is delivered unsanitized to the LLM client. Anyone with push access to the vault's git repository can inject arbitrary instructions that the LLM will treat as authoritative server directives. This is analogous to how Claude Code treats `CLAUDE.md` files in local repositories — they are inherently trusted.
 
 **Recommendation:** Only grant git push access to the vault repository to trusted individuals. If the vault has untrusted collaborators, be aware that they can influence LLM behavior via `CLAUDE.md` files.
+
+## Git Child Process Isolation
+
+Git commands are executed via `execFile` in `src/git/gitSync.ts`. The `sanitizeGitEnv()` function creates a sanitized copy of `process.env` that strips application secrets (`JWT_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_USERS`, `GIT_REPO_URL`) before passing it to the child process. This prevents secrets from being exposed via git hooks, process listings, or malicious remotes. `GIT_TERMINAL_PROMPT=0` is always set to disable interactive prompts.
 
 ## Input Validation
 
