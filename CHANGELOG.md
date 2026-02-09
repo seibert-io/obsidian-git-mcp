@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/seibert-io/obsidian-github-mcp/compare/v1.0.1...v1.1.0) (2026-02-09)
+
+
+### Features
+
+* pass sanitized env to git child processes ([5c18d42](https://github.com/seibert-io/obsidian-github-mcp/commit/5c18d4270cc49453e6401f662311359fd397a513))
+
 ## [1.0.1](https://github.com/seibert-io/obsidian-github-mcp/compare/v1.0.0...v1.0.1) (2026-02-09)
 
 
