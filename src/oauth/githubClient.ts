@@ -43,6 +43,13 @@ export async function exchangeGitHubCode(
     throw new Error(`GitHub OAuth error: ${data.error}`);
   }
 
+  logger.info("GitHub token exchange response", {
+    token_type: data.token_type,
+    scope: data.scope,
+    has_access_token: !!data.access_token,
+    access_token_length: data.access_token?.length ?? 0,
+  });
+
   return data;
 }
 
@@ -63,6 +70,11 @@ export async function fetchGitHubUser(
   });
 
   if (!res.ok) {
+    const body = await res.text().catch(() => "<unreadable>");
+    logger.error("GitHub user info request failed", {
+      status: res.status,
+      body: body.slice(0, 500),
+    });
     throw new Error(`GitHub user info request failed: ${res.status}`);
   }
 
