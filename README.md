@@ -168,16 +168,6 @@ volumes:
 
 </details>
 
-## Troubleshooting
-
-- **"User not authorized"**: Your GitHub username is not in `ALLOWED_GITHUB_USERS`. Check the spelling (comparison is case-insensitive).
-- **GitHub shows "The redirect_uri is not valid"**: The callback URL in your GitHub OAuth App doesn't match `https://your-domain.example.com/oauth/github/callback`.
-- **Caddy shows "permission denied" on port 80/443**: The ports are already in use or blocked by a firewall.
-- **"ACME challenge failed"**: DNS doesn't point to the server yet. Check with `dig your-domain.example.com`.
-- **Let's Encrypt rate limit**: Only happens with very frequent restarts without a `caddy_data` volume. Never delete the `caddy_data` Docker volume.
-- **Claude.ai: Connector stays "inactive"**: The URL must end with `/mcp` (e.g., `https://your-domain.example.com/mcp`). If using Cloudflare, disable "Block AI Bots" ([details](https://github.com/anthropics/claude-ai-mcp/issues/41)).
-- **Claude Code: "Failed to connect"**: The URL must end with `/mcp`. The transport type must be `http` (not `sse`).
-
 ## How It Works
 
 ```
