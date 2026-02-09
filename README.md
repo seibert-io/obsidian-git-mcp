@@ -100,7 +100,7 @@ Caddy automatically obtains a Let's Encrypt certificate on first start (takes ab
 claude mcp add obsidian-vault --transport http https://your-domain.example.com/mcp -s user
 ```
 
-On first use, the OAuth flow opens in your browser. After signing in with GitHub, the connection is active.
+After adding the server, type `/mcp` in Claude Code, select the `obsidian-vault` server, and click **"Authorize"** to complete the OAuth login via your browser.
 
 </details>
 
