@@ -100,8 +100,12 @@ The security review agent must be instructed to:
 - **Volume/mount security**: Are file mounts read-only where possible? Can mounted paths escape the intended scope?
 - **Network exposure**: Is the MCP server only accessible via the internal Docker network (not directly from the internet)?
 
-**Layer 3 — Full-codebase security audit (independent of the current changes):**
-Review the entire application as if seeing it for the first time. Read ALL source files — not just the ones that changed — and audit the complete codebase for vulnerabilities. This layer catches pre-existing issues, systemic weaknesses, and risks that span multiple files but are invisible when only reviewing a diff. The reviewer must trace every data flow from external input to sensitive operation and verify that each boundary is correctly protected.
+**Layer 3 — Full-codebase security audit (conditional — only when needed):**
+Layer 3 is NOT executed by default. After completing Layer 1 and Layer 2, the reviewer must assess whether the changes could have security implications beyond the files and flows already reviewed. Execute Layer 3 **only if** the reviewer cannot confidently rule out that the changes impact other parts of the codebase or other security-critical flows (e.g., changes to shared utilities, auth primitives, input validation logic, or infrastructure configuration that could have cascading effects).
+
+If Layer 3 is triggered: Review the entire application as if seeing it for the first time. Read ALL source files — not just the ones that changed — and audit the complete codebase for vulnerabilities. This layer catches pre-existing issues, systemic weaknesses, and risks that span multiple files but are invisible when only reviewing a diff. The reviewer must trace every data flow from external input to sensitive operation and verify that each boundary is correctly protected.
+
+If Layer 3 is skipped: The reviewer must include a brief statement in their report confirming that Layer 1 and Layer 2 provided sufficient coverage and explaining why the changes are unlikely to have broader security impact.
 
 **The lists above are starting points, not boundaries.** The reviewer must independently identify any additional attack surfaces, vulnerability classes, or architectural risks that are relevant — even if not listed here. The reviewer is expected to think like an attacker and systematically explore all plausible threat vectors.
 
@@ -180,7 +184,7 @@ Fix any HIGH findings before committing. MEDIUM findings should be fixed unless 
 ### Execution Order
 1. `npm run build` — fix type errors
 2. `npm test` — fix failing tests
-3. Security review (independent agent, 3 layers) — fix vulnerabilities
+3. Security review (independent agent, 2 layers + conditional Layer 3) — fix vulnerabilities
 4. Code review (independent agent, clean code) — fix quality issues
 5. Repeat steps 1-4 if fixes were needed
 6. Only then: commit and push
