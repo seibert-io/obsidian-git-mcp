@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.1.0...v1.2.0) (2026-02-09)
+
+
+### Features
+
+* interactive installation guide via claude code ([10af917](https://github.com/seibert-io/obsidian-git-mcp/commit/10af917293a8ea16e493ff25705d7b532568d377))
+
 # [1.1.0](https://github.com/seibert-io/obsidian-github-mcp/compare/v1.0.1...v1.1.0) (2026-02-09)
 
 
