@@ -1,4 +1,4 @@
-# Obsidian Vault MCP Server
+# Obsidian Git Vault MCP Server
 
 > Ever wondered how to ask Claude on your phone to add a todo to your Obsidian vault? Quickly look up that info on a contact you know you've jotted down — while on the go? This MCP server makes your Obsidian vault available to Claude and other AI tools, so you can read, search, and edit your notes from any conversation, anywhere.
 
