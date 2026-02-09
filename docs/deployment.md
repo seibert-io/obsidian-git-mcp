@@ -113,9 +113,9 @@ The `caddy_data` volume stores certificates and ACME state. It **must** be persi
 1. Deploy the server with a public HTTPS URL (or tunnel)
 2. Set `SERVER_URL` to your public URL
 3. In Claude.ai, go to Settings and add a Custom MCP Integration
-4. Enter the **base URL** (without `/mcp`): `https://your-server.example.com`
+4. Enter the MCP endpoint URL: `https://your-server.example.com/mcp`
 5. Claude.ai will:
-   - Discover endpoints via `/.well-known/oauth-authorization-server`
+   - Discover OAuth endpoints via `/.well-known/oauth-authorization-server`
    - Register as a client via `POST /oauth/register`
    - Redirect you to GitHub where you sign in with an allowed account
    - Exchange the auth code for tokens automatically
@@ -123,15 +123,13 @@ The `caddy_data` volume stores certificates and ACME state. It **must** be persi
 
 ### Claude Code (CLI)
 
-Claude Code requires the **full MCP endpoint URL** with `/mcp`:
-
 ```bash
 claude mcp add obsidian-vault --transport http https://your-server.example.com/mcp -s user
 ```
 
 On first use, Claude Code triggers the OAuth flow in your browser. After GitHub authentication, the connection is active.
 
-> **Why different URLs?** Claude.ai uses the base URL and discovers the MCP endpoint via `/.well-known/oauth-protected-resource` (RFC 9728). Claude Code connects directly to the Streamable HTTP transport endpoint and needs the explicit path.
+> Both clients use the same URL with `/mcp`. OAuth discovery endpoints (`/.well-known/*`) are resolved relative to the base domain.
 
 ### Custom Vault Guides
 

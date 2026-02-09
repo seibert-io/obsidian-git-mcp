@@ -43,7 +43,7 @@ export async function exchangeGitHubCode(
     throw new Error(`GitHub OAuth error: ${data.error}`);
   }
 
-  logger.info("GitHub token exchange response", {
+  logger.debug("GitHub token exchange response", {
     token_type: data.token_type,
     scope: data.scope,
     has_access_token: !!data.access_token,

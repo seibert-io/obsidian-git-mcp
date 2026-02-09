@@ -1,14 +1,4 @@
-{
-    debug
-}
-
 {$SERVER_DOMAIN} {
-    log {
-        output stdout
-        format console
-        level DEBUG
-    }
-
     reverse_proxy mcp:3000
 
     header {

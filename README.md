@@ -64,22 +64,18 @@ curl http://localhost:3000/health
 ### 4. Connect from Claude.ai
 
 1. In Claude.ai, go to **Settings** and add a **Custom MCP Integration**
-2. Enter the **base URL** (without `/mcp`): `https://your-server.example.com`
+2. Enter the MCP endpoint URL: `https://your-server.example.com/mcp`
 3. Claude.ai will automatically discover the OAuth endpoints, register as a client, and redirect you to GitHub
 4. Sign in with a GitHub account that is in your `ALLOWED_GITHUB_USERS` list
 5. The vault tools will appear in Claude's tool list
 
 ### 5. Connect from Claude Code (CLI)
 
-Claude Code requires the **full MCP endpoint URL** (with `/mcp`):
-
 ```bash
 claude mcp add obsidian-vault --transport http https://your-server.example.com/mcp -s user
 ```
 
 On first use, Claude Code will trigger the OAuth flow in your browser. After authenticating with GitHub, the server is ready.
-
-> **URL difference:** Claude.ai uses the base URL and discovers `/mcp` automatically. Claude Code needs the explicit `/mcp` path.
 
 ## Available Tools
 
@@ -180,7 +176,7 @@ docker compose up -d
 
 1. Gehe zu https://claude.ai → Settings → Connectors
 2. Klicke **"Add custom connector"**
-3. Gib die **Base-URL** ein (ohne `/mcp`): `https://vault.example.com`
+3. Gib die MCP-Endpoint-URL ein: `https://vault.example.com/mcp`
 4. Claude leitet dich zu GitHub weiter — melde dich an
 5. Nach erfolgreicher Anmeldung ist der Connector aktiv
 
@@ -190,15 +186,15 @@ docker compose up -d
 claude mcp add obsidian-vault --transport http https://vault.example.com/mcp -s user
 ```
 
-Claude Code braucht die **volle MCP-Endpoint-URL** mit `/mcp` am Ende. Beim ersten Zugriff öffnet sich der OAuth-Flow im Browser.
+Beim ersten Zugriff öffnet sich der OAuth-Flow im Browser.
 
 ### Troubleshooting
 
 - **"User not authorized"**: Dein GitHub-Username ist nicht in `ALLOWED_GITHUB_USERS` enthalten. Prüfe die Schreibweise (case-insensitive).
 - **GitHub zeigt "The redirect_uri is not valid"**: Die Callback-URL in der GitHub OAuth App stimmt nicht mit `SERVER_URL/oauth/github/callback` überein.
 - **Claude.ai zeigt einen Verbindungsfehler**: Prüfe ob der Server erreichbar ist und HTTPS korrekt konfiguriert ist.
-- **Claude.ai: Connector "inaktiv" trotz erfolgreicher Authentifizierung**: Bekanntes Problem auf Anthropic-Seite ([#35](https://github.com/anthropics/claude-ai-mcp/issues/35), [#38](https://github.com/anthropics/claude-ai-mcp/issues/38)). Falls Cloudflare im Einsatz ist: "Block AI Bots" deaktivieren (blockiert Claudes Backend-Proxy). Siehe auch [Troubleshooting](#troubleshooting-1) im Production-Abschnitt.
-- **Claude Code: "Failed to connect"**: Prüfe ob die URL mit `/mcp` endet. Der Transport-Typ muss `http` sein (nicht `sse`).
+- **Claude.ai: Connector "inaktiv" trotz erfolgreicher Authentifizierung**: Die URL muss mit `/mcp` enden. Claude.ai postet direkt an die angegebene URL — ohne `/mcp` wird der MCP-Handler nicht erreicht (404). Falls das Problem trotzdem besteht und Cloudflare im Einsatz ist: "Block AI Bots" deaktivieren ([Details](https://github.com/anthropics/claude-ai-mcp/issues/41)).
+- **Claude Code: "Failed to connect"**: Die URL muss mit `/mcp` enden. Der Transport-Typ muss `http` sein (nicht `sse`).
 
 ## Production Deployment (HTTPS)
 
@@ -275,7 +271,7 @@ docker compose -f docker-compose.prod.yml logs mcp
 **Claude.ai:**
 1. Gehe zu https://claude.ai → Settings → Connectors
 2. Klicke **"Add custom connector"**
-3. URL (Base, ohne `/mcp`): `https://vault.example.com`
+3. URL: `https://vault.example.com/mcp`
 4. Claude leitet dich zu GitHub weiter — anmelden — fertig
 
 **Claude Code (CLI):**
@@ -283,7 +279,7 @@ docker compose -f docker-compose.prod.yml logs mcp
 claude mcp add obsidian-vault --transport http https://vault.example.com/mcp -s user
 ```
 
-> **Warum unterschiedliche URLs?** Claude.ai nutzt die Base-URL und discovert den MCP-Endpoint über `/.well-known/oauth-protected-resource` automatisch. Claude Code verbindet sich direkt zum Transport-Endpoint und braucht daher die volle URL mit `/mcp`.
+> Beide Clients verwenden die gleiche URL mit `/mcp` am Ende. Claude.ai entdeckt die OAuth-Endpoints über `/.well-known/oauth-protected-resource` relativ zur Basis-Domain.
 
 ### Troubleshooting
 
@@ -291,7 +287,7 @@ claude mcp add obsidian-vault --transport http https://vault.example.com/mcp -s 
 - **"ACME challenge failed"**: DNS zeigt noch nicht auf den Server. Prüfe mit `dig vault.example.com`.
 - **Let's Encrypt Rate Limit**: Passiert nur bei sehr häufigen Neustarts ohne `caddy_data` Volume. Nie das Volume löschen.
 - **Lokal testen ohne Domain**: Nutze `docker compose up` (ohne `-f prod`) für direkten HTTP-Zugriff auf Port 3000.
-- **Claude.ai: Connector "inaktiv" trotz erfolgreicher Authentifizierung**: Bekanntes Anthropic-seitiges Problem. Claudes Backend-Proxy (`python-httpx`) sendet den Bearer Token nach dem OAuth-Flow teilweise nicht mit. Prüfe: (1) Falls Cloudflare im Einsatz → "Block AI Bots" deaktivieren ([Details](https://github.com/anthropics/claude-ai-mcp/issues/41)). (2) Server-Logs prüfen — kommt ein `POST /mcp` ohne `Authorization`-Header an? (3) Issue bei Anthropic erstellen: [anthropics/claude-ai-mcp](https://github.com/anthropics/claude-ai-mcp/issues) mit Template "Auth Connection Issue: Server Developer". (4) Direkt-Support: `mcp-support@anthropic.com`. Status: Teilweise gefixt, aber nicht für alle Server ([#35](https://github.com/anthropics/claude-ai-mcp/issues/35), [#38](https://github.com/anthropics/claude-ai-mcp/issues/38), [#46](https://github.com/anthropics/claude-ai-mcp/issues/46)).
+- **Claude.ai: Connector "inaktiv" trotz erfolgreicher Authentifizierung**: Die URL muss mit `/mcp` enden (z.B. `https://vault.example.com/mcp`). Claude.ai postet direkt an die angegebene URL. Ohne `/mcp` kommt eine 404-Antwort und der Connector bleibt inaktiv. Falls das Problem trotzdem besteht: (1) Caddy-Logs auf `POST /mcp` prüfen — kommt der Request an? (2) Falls Cloudflare → "Block AI Bots" deaktivieren ([Details](https://github.com/anthropics/claude-ai-mcp/issues/41)).
 - **Claude Code: "Failed to connect"**: URL muss mit `/mcp` enden, Transport-Typ muss `http` sein (nicht `sse`).
 
 ### Development vs. Production
