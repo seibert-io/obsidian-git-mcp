@@ -23,7 +23,8 @@ RUN useradd --create-home --shell /bin/bash mcpuser
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+# --ignore-scripts: skip prepare lifecycle script which invokes husky (a devDependency not present with --omit=dev)
+RUN npm ci --omit=dev --ignore-scripts
 
 COPY --from=builder /app/dist ./dist
 
