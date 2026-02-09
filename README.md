@@ -23,6 +23,8 @@ All you need is an existing [Obsidian Git](https://github.com/Vinzent03/obsidian
 
 ## Getting Started
 
+> **Want Claude Code to guide you through the setup?** Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on your server, then use the [Setup Assistant Prompt](docs/setup-assistant-prompt.md) instead of manually following the steps below. Claude Code will walk you through every step interactively, including installing prerequisites.
+
 ### Step 1: Create a GitHub OAuth App
 
 1. Go to [GitHub Developer Settings](https://github.com/settings/developers) and click **"New OAuth App"**

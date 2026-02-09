@@ -28,6 +28,7 @@ Load the relevant doc file when working on a specific domain:
 | `docs/configuration.md` | All environment variables with types/defaults, private repo setup | Adding config options or debugging env var issues |
 | `docs/deployment.md` | Docker build/run, docker-compose, Claude.ai OAuth integration, health checks | Deployment, Docker changes, connecting to Claude.ai |
 | `docs/testing.md` | Test framework, test suites, how to add tests | Writing or running tests |
+| `docs/setup-assistant-prompt.md` | Claude Code guided setup prompt for server installation | Updating setup instructions or the interactive assistant |
 
 ## Key Architecture Points
 
