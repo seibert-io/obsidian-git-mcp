@@ -96,6 +96,7 @@ export function registerDirectoryOps(server: McpServer, config: Config): void {
     "list_directory",
     {
       description: "List files and directories in vault paths. Supports batch listing via 'paths' array (max 10).",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         path: z.string().default(".").optional().describe("Path relative to vault root (single directory)"),
         paths: z.array(z.string()).max(MAX_BATCH_SIZE).optional().describe("Multiple paths for batch listing (max 10)"),
@@ -156,7 +157,9 @@ export function registerDirectoryOps(server: McpServer, config: Config): void {
   server.registerTool(
     "create_directory",
     {
-      description: "Create a directory in the vault (including parent directories)",
+      description:
+        "Create a directory in the vault (including parent directories). " +
+        "Clients SHOULD inform the user which directory will be created before calling this tool.",
       inputSchema: {
         path: z.string().describe("Path relative to vault root"),
       },

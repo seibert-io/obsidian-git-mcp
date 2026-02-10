@@ -122,6 +122,7 @@ export function registerHistoryOperations(server: McpServer, config: Config): vo
     {
       description:
         "Show recent changes made to the vault with full diffs. Returns a list of recent commits showing what content was added, modified, or deleted in each file. Use this to understand what changed recently.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         count: z
           .number()

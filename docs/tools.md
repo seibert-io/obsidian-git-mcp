@@ -4,6 +4,29 @@ All tools operate within the vault directory boundary. Paths are relative to the
 
 **Hidden directories:** The `.git` and `.claude` directories are automatically excluded from all listings, searches, file counts, and vault statistics. This is controlled by the `HIDDEN_DIRECTORIES` constant in `src/utils/constants.ts`.
 
+## Tool Annotations
+
+All tools declare [MCP tool annotations](https://modelcontextprotocol.io/specification/2025-06-18/server/tools#annotations) to signal their behavior to clients:
+
+| Annotation | Value | Tools |
+|---|---|---|
+| `readOnlyHint` | `true` | `read_file`, `list_directory`, `search_files`, `grep`, `find_files`, `get_vault_info`, `get_backlinks`, `get_tags`, `get_recent_changes`, `get_obsidian_guide`, `get_claude_context` |
+| `destructiveHint` | `true` | `write_file`, `edit_file`, `delete_file`, `rename_file` |
+
+`create_directory` has no annotation hints set (it modifies the vault but is not destructive).
+
+### Preview Recommendation for Write Operations
+
+The server recommends (via tool descriptions and server instructions) that clients **present planned changes to the user before executing** any write operation:
+
+- **`write_file`**: Show the intended file content — full content for small files, a representative excerpt for large ones
+- **`edit_file`**: Show how the file will look after the edit — full resulting content for small files, a relevant excerpt around the changed section for large ones
+- **`delete_file`**: State which file will be deleted and confirm the action
+- **`rename_file`**: State the source and destination paths
+- **`create_directory`**: State which directory will be created
+
+This is a **recommendation**, not enforcement — the server has no mechanism to block execution. Clients that support human-in-the-loop confirmation (e.g., via `destructiveHint`) should use these signals to prompt for user review.
+
 ## Batch Operations
 
 Several tools support batch operations for processing multiple items in a single call. Batch support is implemented via `src/utils/batchUtils.ts`.

@@ -37,6 +37,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
     "search_files",
     {
       description: "Find files by name pattern (glob). Supports batch searches via 'searches' array (max 10).",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         pattern: z.string().optional().describe("Glob pattern to match file names (single search)"),
         path: z.string().default(".").optional().describe("Directory to search in, relative to vault root"),
@@ -124,6 +125,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
     "grep",
     {
       description: "Search file contents by text or regex pattern. Returns matching lines with file paths and line numbers.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         query: z.string().describe("Search query (text or regex)"),
         path: z.string().default(".").describe("Directory to search in, relative to vault root"),
@@ -214,6 +216,7 @@ export function registerSearchOperations(server: McpServer, config: Config): voi
     "find_files",
     {
       description: "Advanced file finder with filters. Supports batch queries via 'queries' array (max 10).",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         path: z.string().default(".").optional().describe("Directory to search in, relative to vault root"),
         name: z.string().optional().describe("File name glob pattern"),

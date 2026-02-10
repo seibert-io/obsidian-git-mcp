@@ -49,6 +49,7 @@ The Obsidian Vault MCP Server is a Dockerized Node.js application that exposes a
 - **Stateful sessions**: Each client connection gets a unique session ID tracked by a `StreamableHTTPServerTransport` instance
 - **Path sandboxing**: All file paths are resolved and validated against `VAULT_PATH` before any I/O
 - **Git-triggered writes**: Every write operation (write, edit, delete, rename) triggers `git add . && git commit && git push`
+- **Write operation preview**: All write tools carry `destructiveHint: true` annotations and their descriptions recommend that clients present planned changes to the user before execution. The server instructions reinforce this recommendation. This is advisory — the server does not enforce confirmation
 - **Periodic pull**: A configurable interval pulls remote changes to keep the vault in sync
 - **Dependency injection**: OAuth stores (`OAuthStore`, `OAuthSessionStore`) and rate limiters are instantiated in `transport.ts` and injected into handlers — no module-level singletons
 
