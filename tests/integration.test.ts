@@ -16,6 +16,12 @@ import { registerVaultOperations } from "../src/tools/vaultOperations.js";
 import { initDebouncedSync, stopDebouncedSync } from "../src/git/debouncedSync.js";
 import { createTestConfig } from "./helpers/testConfig.js";
 
+type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
+
+function getToolText(result: ToolResult): string {
+  return (result.content as Array<{ type: string; text: string }>)[0].text;
+}
+
 const TEST_VAULT = "/tmp/test-vault-integration";
 
 const testConfig = createTestConfig({ vaultPath: TEST_VAULT });
@@ -36,6 +42,14 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     await writeFile(path.join(resolvedVault, "hello.md"), "# Hello World\n\nThis is a test note.\n\n#test #example\n");
     await mkdir(path.join(resolvedVault, "subfolder"), { recursive: true });
     await writeFile(path.join(resolvedVault, "subfolder", "nested.md"), "Nested note with [[hello]] link.\n");
+
+    // Create multi-line files for read_file_lines tests
+    const multiLineContent = Array.from({ length: 20 }, (_, i) => `Line ${i + 1} content`).join("\n");
+    await writeFile(path.join(resolvedVault, "multiline.md"), multiLineContent);
+    const largeContent = Array.from({ length: 600 }, (_, i) => `Row ${i + 1}`).join("\n");
+    await writeFile(path.join(resolvedVault, "large.md"), largeContent);
+    // Create a binary file for null-byte detection tests
+    await writeFile(path.join(resolvedVault, "binary.dat"), Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x00, 0x0A, 0x1A, 0x0A]));
 
     // Create .claude directory that should be hidden from all listings/searches
     await mkdir(path.join(resolvedVault, ".claude", "skills"), { recursive: true });
@@ -142,6 +156,8 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     const result = await client.listTools();
     const toolNames = result.tools.map((t) => t.name);
     expect(toolNames).toContain("read_file");
+    expect(toolNames).toContain("read_file_lines");
+    expect(toolNames).not.toContain("tail_file");
     expect(toolNames).toContain("write_file");
     expect(toolNames).toContain("edit_file");
     expect(toolNames).toContain("delete_file");
@@ -161,7 +177,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "read_file",
       arguments: { path: "hello.md" },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("# Hello World");
   });
 
@@ -170,7 +186,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "list_directory",
       arguments: { path: "." },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("hello.md");
     expect(text).toContain("subfolder/");
   });
@@ -188,7 +204,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
         name: "list_directory",
         arguments: { path: ".", recursive: true },
       });
-      const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+      const text = getToolText(result);
       expect(text).not.toContain("escape-link");
       expect(text).not.toContain("secret.txt");
     } finally {
@@ -202,7 +218,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "search_files",
       arguments: { pattern: "**/*.md" },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("hello.md");
     expect(text).toContain("subfolder/nested.md");
   });
@@ -212,7 +228,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "grep",
       arguments: { query: "Hello World" },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("hello.md");
   });
 
@@ -221,7 +237,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "get_backlinks",
       arguments: { path: "hello.md" },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("subfolder/nested.md");
   });
 
@@ -230,7 +246,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "get_tags",
       arguments: { path: "hello.md" },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("#test");
     expect(text).toContain("#example");
   });
@@ -240,7 +256,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "get_vault_info",
       arguments: {},
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("Total files:");
     expect(text).toContain("Markdown files:");
   });
@@ -250,7 +266,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "list_directory",
       arguments: { path: "." },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).not.toContain(".claude");
   });
 
@@ -259,7 +275,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "list_directory",
       arguments: { path: ".", recursive: true },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).not.toContain(".claude");
     expect(text).not.toContain("test-skill");
   });
@@ -269,7 +285,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "search_files",
       arguments: { pattern: "**/*.md" },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).not.toContain(".claude");
     expect(text).not.toContain("test-skill");
   });
@@ -279,7 +295,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "grep",
       arguments: { query: "Skill file" },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toBe("No matches found");
   });
 
@@ -288,7 +304,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "find_files",
       arguments: { name: "**/*.md" },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).not.toContain(".claude");
     expect(text).not.toContain("test-skill");
   });
@@ -298,7 +314,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "get_vault_info",
       arguments: {},
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).not.toContain(".claude");
   });
 
@@ -308,7 +324,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       arguments: { path: "../../etc/passwd" },
     });
     expect(result.isError).toBe(true);
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("traversal");
   });
 
@@ -341,7 +357,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "list_directory",
       arguments: { paths: [".", "subfolder"] },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("--- [1/2] . ---");
     expect(text).toContain("hello.md");
     expect(text).toContain("subfolder/");
@@ -354,7 +370,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "list_directory",
       arguments: { paths: [".", "nonexistent-dir"] },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("--- [1/2] . ---");
     expect(text).toContain("hello.md");
     expect(text).toContain("--- [2/2] nonexistent-dir ---");
@@ -374,7 +390,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "list_directory",
       arguments: { paths: [".", "subfolder"], recursive: true },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("--- [1/2] . ---");
     expect(text).toContain("subfolder/nested.md");
     expect(text).toContain("--- [2/2] subfolder ---");
@@ -385,7 +401,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "list_directory",
       arguments: { paths: [".", "subfolder"] },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).not.toContain(".claude");
   });
 
@@ -394,7 +410,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "list_directory",
       arguments: { path: "subfolder" },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("subfolder/nested.md");
     // Single-path mode should NOT use batch format
     expect(text).not.toContain("---");
@@ -405,7 +421,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "list_directory",
       arguments: {},
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("hello.md");
     expect(text).toContain("subfolder/");
   });
@@ -415,7 +431,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "list_directory",
       arguments: { paths: ["hello.md"] },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("Not a directory");
   });
 
@@ -426,7 +442,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "read_file",
       arguments: { paths: ["hello.md", "subfolder/nested.md"] },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("--- [1/2] hello.md ---");
     expect(text).toContain("# Hello World");
     expect(text).toContain("--- [2/2] subfolder/nested.md ---");
@@ -438,7 +454,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
       name: "read_file",
       arguments: { paths: ["hello.md", "nonexistent.md"] },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("--- [1/2] hello.md ---");
     expect(text).toContain("# Hello World");
     expect(text).toContain("--- [2/2] nonexistent.md ---");
@@ -449,6 +465,157 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     const result = await client.callTool({
       name: "read_file",
       arguments: { paths: [] },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  // --- read_file_lines tests ---
+
+  it("reads a specific line range from a file", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 3, end_line: 5 },
+    });
+    const text = getToolText(result);
+    expect(text).toContain("Lines 3-5 of 20 total lines");
+    expect(text).toContain("3: Line 3 content");
+    expect(text).toContain("4: Line 4 content");
+    expect(text).toContain("5: Line 5 content");
+    expect(text).not.toContain("2: Line 2 content");
+    expect(text).not.toContain("6: Line 6 content");
+  });
+
+  it("reads to end of file when end_line is omitted", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 18 },
+    });
+    const text = getToolText(result);
+    expect(text).toContain("Lines 18-20 of 20 total lines");
+    expect(text).toContain("18: Line 18 content");
+    expect(text).toContain("20: Line 20 content");
+  });
+
+  it("clamps end_line to total line count", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 18, end_line: 100 },
+    });
+    const text = getToolText(result);
+    expect(text).toContain("Lines 18-20 of 20 total lines");
+    expect(text).toContain("18: Line 18 content");
+    expect(text).toContain("20: Line 20 content");
+  });
+
+  it("reads last N lines with negative start_line", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: -3 },
+    });
+    const text = getToolText(result);
+    expect(text).toContain("Lines 18-20 of 20 total lines");
+    expect(text).toContain("18: Line 18 content");
+    expect(text).toContain("19: Line 19 content");
+    expect(text).toContain("20: Line 20 content");
+    expect(text).not.toContain("17: Line 17 content");
+  });
+
+  it("clamps negative start_line to line 1 when it exceeds file length", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: -500 },
+    });
+    const text = getToolText(result);
+    expect(text).toContain("Lines 1-20 of 20 total lines");
+    expect(text).toContain("1: Line 1 content");
+    expect(text).toContain("20: Line 20 content");
+  });
+
+  it("returns error when end_line is used with negative start_line", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: -5, end_line: 10 },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("end_line cannot be used with negative start_line");
+  });
+
+  it("returns error when start_line exceeds total lines", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 100, end_line: 200 },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("beyond total line count");
+  });
+
+  it("returns error when end_line < start_line", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 10, end_line: 5 },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("end_line must be >= start_line");
+  });
+
+  it("returns error when resolved line range exceeds maximum", async () => {
+    // large.md has 600 lines; requesting all of them exceeds MAX_LINES_PER_PARTIAL_READ (500)
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "large.md", start_line: 1 },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("exceeds maximum");
+  });
+
+  it("blocks hidden directory access via read_file_lines", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: ".claude/skills/test-skill.md", start_line: 1, end_line: 10 },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("not allowed");
+  });
+
+  it("returns error for path traversal in read_file_lines", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "../../etc/passwd", start_line: 1, end_line: 10 },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("traversal");
+  });
+
+  it("rejects binary files in read_file_lines", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "binary.dat", start_line: 1, end_line: 5 },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("Binary file detected");
+  });
+
+  it("rejects binary files in read_file", async () => {
+    const result = await client.callTool({
+      name: "read_file",
+      arguments: { path: "binary.dat" },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("Binary file detected");
+  });
+
+  it("returns error for nonexistent file in read_file_lines", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "does-not-exist.md", start_line: -5 },
     });
     expect(result.isError).toBe(true);
   });
@@ -465,7 +632,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
         ],
       },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("--- [1/2] batch1.md ---");
     expect(text).toContain("File written: batch1.md");
     expect(text).toContain("--- [2/2] batch2.md ---");
@@ -497,7 +664,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
         ],
       },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("File edited: edit-batch1.md");
     expect(text).toContain("File edited: edit-batch2.md");
 
@@ -521,7 +688,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
         ],
       },
     });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    const text = getToolText(result);
     expect(text).toContain("File edited: edit-partial.md");
     expect(text).toContain("ERROR:");
   });

@@ -1,6 +1,9 @@
 /** Maximum file size for read/write/search operations (10 MB). */
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+/** Maximum number of lines returned by read_file_lines per request. */
+export const MAX_LINES_PER_PARTIAL_READ = 500;
+
 /** Default cap for rate limiter entries to prevent unbounded memory growth. */
 export const DEFAULT_MAX_RATE_LIMIT_ENTRIES = 10_000;
 

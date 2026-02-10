@@ -9,19 +9,71 @@ import { validateBatchSize, formatBatchResults, MAX_BATCH_SIZE } from "../utils/
 import type { BatchResult } from "../utils/batchUtils.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
-import { MAX_FILE_SIZE } from "../utils/constants.js";
+import { MAX_FILE_SIZE, MAX_LINES_PER_PARTIAL_READ } from "../utils/constants.js";
+
+async function readValidatedContent(
+  vaultPath: string,
+  filePath: string,
+): Promise<{ content: string; resolvedPath: string } | { error: string }> {
+  const resolvedPath = await resolveVaultPathSafe(vaultPath, filePath);
+  const fileStat = await stat(resolvedPath);
+  if (fileStat.size > MAX_FILE_SIZE) {
+    return { error: `File too large (${fileStat.size} bytes, max ${MAX_FILE_SIZE})` };
+  }
+  const content = await readFile(resolvedPath, "utf-8");
+  if (content.includes("\0")) {
+    return { error: "Binary file detected (contains null bytes)" };
+  }
+  return { content, resolvedPath };
+}
 
 async function readSingleFile(vaultPath: string, filePath: string): Promise<BatchResult> {
   try {
-    const resolved = await resolveVaultPathSafe(vaultPath, filePath);
-    const fileStat = await stat(resolved);
-    if (fileStat.size > MAX_FILE_SIZE) {
-      return { index: 0, path: filePath, success: false, content: `File too large (${fileStat.size} bytes, max ${MAX_FILE_SIZE})` };
+    const result = await readValidatedContent(vaultPath, filePath);
+    if ("error" in result) {
+      return { index: 0, path: filePath, success: false, content: result.error };
     }
-    const content = await readFile(resolved, "utf-8");
-    return { index: 0, path: filePath, success: true, content };
+    return { index: 0, path: filePath, success: true, content: result.content };
   } catch (error) {
     return { index: 0, path: filePath, success: false, content: getErrorMessage(error) };
+  }
+}
+
+async function readLineRange(
+  vaultPath: string,
+  filePath: string,
+  startLine: number,
+  endLine: number | undefined,
+): Promise<{ success: boolean; content: string }> {
+  try {
+    const result = await readValidatedContent(vaultPath, filePath);
+    if ("error" in result) {
+      return { success: false, content: result.error };
+    }
+    const lines = result.content.split("\n");
+    const totalLines = lines.length;
+
+    // Resolve negative start_line (from end, like Python slicing)
+    const resolvedStart = startLine < 0
+      ? Math.max(1, totalLines + startLine + 1)
+      : startLine;
+    const resolvedEnd = endLine !== undefined ? Math.min(totalLines, endLine) : totalLines;
+
+    if (resolvedStart > totalLines) {
+      return { success: false, content: `start_line ${startLine} resolves beyond total line count (${totalLines})` };
+    }
+
+    const rangeSize = resolvedEnd - resolvedStart + 1;
+    if (rangeSize > MAX_LINES_PER_PARTIAL_READ) {
+      return { success: false, content: `Requested ${rangeSize} lines exceeds maximum (${MAX_LINES_PER_PARTIAL_READ} per request)` };
+    }
+
+    const selectedLines = lines.slice(resolvedStart - 1, resolvedEnd);
+    const numbered = selectedLines.map((line, i) => `${resolvedStart + i}: ${line}`).join("\n");
+    const header = `Lines ${resolvedStart}-${resolvedEnd} of ${totalLines} total lines in ${filePath}:`;
+    return { success: true, content: `${header}\n${numbered}` };
+  } catch (error) {
+    return { success: false, content: getErrorMessage(error) };
   }
 }
 
@@ -50,14 +102,12 @@ async function editSingleFile(
   newText: string,
 ): Promise<BatchResult> {
   try {
-    const resolved = await resolveVaultPathSafe(vaultPath, filePath);
-    const fileStat = await stat(resolved);
-    if (fileStat.size > MAX_FILE_SIZE) {
-      return { index: 0, path: filePath, success: false, content: `File too large (${fileStat.size} bytes, max ${MAX_FILE_SIZE})` };
+    const result = await readValidatedContent(vaultPath, filePath);
+    if ("error" in result) {
+      return { index: 0, path: filePath, success: false, content: result.error };
     }
-    const content = await readFile(resolved, "utf-8");
 
-    const occurrences = content.split(oldText).length - 1;
+    const occurrences = result.content.split(oldText).length - 1;
     if (occurrences === 0) {
       return { index: 0, path: filePath, success: false, content: "old_text not found in file" };
     }
@@ -65,8 +115,8 @@ async function editSingleFile(
       return { index: 0, path: filePath, success: false, content: `old_text found ${occurrences} times, must match exactly once` };
     }
 
-    const newContent = content.replace(oldText, () => newText);
-    await writeFile(resolved, newContent, "utf-8");
+    const newContent = result.content.replace(oldText, () => newText);
+    await writeFile(result.resolvedPath, newContent, "utf-8");
     return { index: 0, path: filePath, success: true, content: `File edited: ${filePath}` };
   } catch (error) {
     return { index: 0, path: filePath, success: false, content: getErrorMessage(error) };
@@ -106,6 +156,38 @@ export function registerFileOperations(server: McpServer, config: Config): void 
         }),
       );
       return toolSuccess(formatBatchResults(results));
+    },
+  );
+
+  // read_file_lines
+  server.registerTool(
+    "read_file_lines",
+    {
+      description:
+        "Read a range of lines from a file. Returns numbered lines with a header showing the range and total line count. " +
+        "Supports negative start_line for reading from the end (e.g., start_line: -50 reads the last 50 lines). " +
+        "Useful for reading frontmatter, tailing logs, or sequentially processing large files.",
+      inputSchema: {
+        path: z.string().describe("Path relative to vault root"),
+        start_line: z.number().int().refine((v) => v !== 0, "start_line cannot be 0")
+          .describe("First line (1-based). Positive: from start. Negative: from end (-50 = last 50 lines)"),
+        end_line: z.number().int().min(1).optional()
+          .describe("Last line (1-based, inclusive). Omit to read to end of file"),
+      },
+    },
+    async ({ path: filePath, start_line, end_line }) => {
+      if (start_line > 0 && end_line !== undefined && end_line < start_line) {
+        return toolError("end_line must be >= start_line");
+      }
+      if (start_line < 0 && end_line !== undefined) {
+        return toolError("end_line cannot be used with negative start_line");
+      }
+      const result = await readLineRange(config.vaultPath, filePath, start_line, end_line);
+      if (!result.success) {
+        logger.error("read_file_lines failed", { path: filePath, error: result.content });
+        return toolError(`Failed to read file lines: ${result.content}`);
+      }
+      return toolSuccess(result.content);
     },
   );
 
