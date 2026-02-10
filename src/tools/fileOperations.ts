@@ -9,7 +9,7 @@ import { validateBatchSize, formatBatchResults, MAX_BATCH_SIZE } from "../utils/
 import type { BatchResult } from "../utils/batchUtils.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
-import { MAX_FILE_SIZE, MAX_TAIL_LINES, MAX_LINE_RANGE } from "../utils/constants.js";
+import { MAX_FILE_SIZE, MAX_LINES_PER_PARTIAL_READ } from "../utils/constants.js";
 
 async function readValidatedContent(
   vaultPath: string,
@@ -20,7 +20,11 @@ async function readValidatedContent(
   if (fileStat.size > MAX_FILE_SIZE) {
     return { error: `File too large (${fileStat.size} bytes, max ${MAX_FILE_SIZE})` };
   }
-  return { content: await readFile(resolved, "utf-8") };
+  const content = await readFile(resolved, "utf-8");
+  if (content.includes("\0")) {
+    return { error: "Binary file detected (contains null bytes)" };
+  }
+  return { content };
 }
 
 async function readSingleFile(vaultPath: string, filePath: string): Promise<BatchResult> {
@@ -39,7 +43,7 @@ async function readLineRange(
   vaultPath: string,
   filePath: string,
   startLine: number,
-  endLine: number,
+  endLine: number | undefined,
 ): Promise<{ success: boolean; content: string }> {
   try {
     const result = await readValidatedContent(vaultPath, filePath);
@@ -49,38 +53,24 @@ async function readLineRange(
     const lines = result.content.split("\n");
     const totalLines = lines.length;
 
-    if (startLine > totalLines) {
-      return { success: false, content: `start_line ${startLine} exceeds total line count (${totalLines})` };
+    // Resolve negative start_line (from end, like Python slicing)
+    const resolvedStart = startLine < 0
+      ? Math.max(1, totalLines + startLine + 1)
+      : startLine;
+    const resolvedEnd = endLine !== undefined ? Math.min(totalLines, endLine) : totalLines;
+
+    if (resolvedStart > totalLines) {
+      return { success: false, content: `start_line ${startLine} resolves beyond total line count (${totalLines})` };
     }
 
-    const end = Math.min(totalLines, endLine);
-    const selectedLines = lines.slice(startLine - 1, end);
-    const numbered = selectedLines.map((line, i) => `${startLine + i}: ${line}`).join("\n");
-    const header = `Lines ${startLine}-${end} of ${totalLines} total lines in ${filePath}:`;
-    return { success: true, content: `${header}\n${numbered}` };
-  } catch (error) {
-    return { success: false, content: getErrorMessage(error) };
-  }
-}
-
-async function readTail(
-  vaultPath: string,
-  filePath: string,
-  lineCount: number,
-): Promise<{ success: boolean; content: string }> {
-  try {
-    const result = await readValidatedContent(vaultPath, filePath);
-    if ("error" in result) {
-      return { success: false, content: result.error };
+    const rangeSize = resolvedEnd - resolvedStart + 1;
+    if (rangeSize > MAX_LINES_PER_PARTIAL_READ) {
+      return { success: false, content: `Requested ${rangeSize} lines exceeds maximum (${MAX_LINES_PER_PARTIAL_READ} per request)` };
     }
-    const lines = result.content.split("\n");
-    const totalLines = lines.length;
 
-    const count = Math.min(lineCount, totalLines);
-    const startLine = totalLines - count + 1;
-    const selectedLines = lines.slice(-count);
-    const numbered = selectedLines.map((line, i) => `${startLine + i}: ${line}`).join("\n");
-    const header = `Last ${count} of ${totalLines} total lines in ${filePath}:`;
+    const selectedLines = lines.slice(resolvedStart - 1, resolvedEnd);
+    const numbered = selectedLines.map((line, i) => `${resolvedStart + i}: ${line}`).join("\n");
+    const header = `Lines ${resolvedStart}-${resolvedEnd} of ${totalLines} total lines in ${filePath}:`;
     return { success: true, content: `${header}\n${numbered}` };
   } catch (error) {
     return { success: false, content: getErrorMessage(error) };
@@ -176,48 +166,28 @@ export function registerFileOperations(server: McpServer, config: Config): void 
     "read_file_lines",
     {
       description:
-        "Read a specific range of lines from a file. Returns numbered lines with a header showing the range and total line count. " +
-        "Useful for reading frontmatter, headers, or sequentially processing large files without returning the entire content.",
+        "Read a range of lines from a file. Returns numbered lines with a header showing the range and total line count. " +
+        "Supports negative start_line for reading from the end (e.g., start_line: -50 reads the last 50 lines). " +
+        "Useful for reading frontmatter, tailing logs, or sequentially processing large files.",
       inputSchema: {
         path: z.string().describe("Path relative to vault root"),
-        start_line: z.number().int().min(1).describe("First line to read (1-based, inclusive)"),
-        end_line: z.number().int().min(1).describe("Last line to read (1-based, inclusive)"),
+        start_line: z.number().int().refine((v) => v !== 0, "start_line cannot be 0")
+          .describe("First line (1-based). Positive: from start. Negative: from end (-50 = last 50 lines)"),
+        end_line: z.number().int().min(1).optional()
+          .describe("Last line (1-based, inclusive). Omit to read to end of file"),
       },
     },
     async ({ path: filePath, start_line, end_line }) => {
-      if (end_line < start_line) {
+      if (start_line > 0 && end_line !== undefined && end_line < start_line) {
         return toolError("end_line must be >= start_line");
       }
-      if (end_line - start_line + 1 > MAX_LINE_RANGE) {
-        return toolError(`Line range too large (max ${MAX_LINE_RANGE} lines per request)`);
+      if (start_line < 0 && end_line !== undefined) {
+        return toolError("end_line cannot be used with negative start_line");
       }
       const result = await readLineRange(config.vaultPath, filePath, start_line, end_line);
       if (!result.success) {
         logger.error("read_file_lines failed", { path: filePath, error: result.content });
         return toolError(`Failed to read file lines: ${result.content}`);
-      }
-      return toolSuccess(result.content);
-    },
-  );
-
-  // tail_file
-  server.registerTool(
-    "tail_file",
-    {
-      description:
-        "Read the last N lines of a file (like the 'tail' command). Returns numbered lines with a header showing the count and total line count. " +
-        "Useful for checking recent entries in logs, journals, or append-heavy files.",
-      inputSchema: {
-        path: z.string().describe("Path relative to vault root"),
-        lines: z.number().int().min(1).max(MAX_TAIL_LINES).default(50)
-          .describe(`Number of lines to read from the end (default: 50, max: ${MAX_TAIL_LINES})`),
-      },
-    },
-    async ({ path: filePath, lines: lineCount }) => {
-      const result = await readTail(config.vaultPath, filePath, lineCount);
-      if (!result.success) {
-        logger.error("tail_file failed", { path: filePath, error: result.content });
-        return toolError(`Failed to tail file: ${result.content}`);
       }
       return toolSuccess(result.content);
     },

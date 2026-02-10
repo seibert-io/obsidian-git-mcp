@@ -37,9 +37,13 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     await mkdir(path.join(resolvedVault, "subfolder"), { recursive: true });
     await writeFile(path.join(resolvedVault, "subfolder", "nested.md"), "Nested note with [[hello]] link.\n");
 
-    // Create a multi-line file for read_file_lines / tail_file tests
+    // Create multi-line files for read_file_lines tests
     const multiLineContent = Array.from({ length: 20 }, (_, i) => `Line ${i + 1} content`).join("\n");
     await writeFile(path.join(resolvedVault, "multiline.md"), multiLineContent);
+    const largeContent = Array.from({ length: 600 }, (_, i) => `Row ${i + 1}`).join("\n");
+    await writeFile(path.join(resolvedVault, "large.md"), largeContent);
+    // Create a binary file for null-byte detection tests
+    await writeFile(path.join(resolvedVault, "binary.dat"), Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x00, 0x0A, 0x1A, 0x0A]));
 
     // Create .claude directory that should be hidden from all listings/searches
     await mkdir(path.join(resolvedVault, ".claude", "skills"), { recursive: true });
@@ -147,7 +151,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     const toolNames = result.tools.map((t) => t.name);
     expect(toolNames).toContain("read_file");
     expect(toolNames).toContain("read_file_lines");
-    expect(toolNames).toContain("tail_file");
+    expect(toolNames).not.toContain("tail_file");
     expect(toolNames).toContain("write_file");
     expect(toolNames).toContain("edit_file");
     expect(toolNames).toContain("delete_file");
@@ -475,6 +479,17 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     expect(text).not.toContain("6: Line 6 content");
   });
 
+  it("reads to end of file when end_line is omitted", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 18 },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("Lines 18-20 of 20 total lines");
+    expect(text).toContain("18: Line 18 content");
+    expect(text).toContain("20: Line 20 content");
+  });
+
   it("clamps end_line to total line count", async () => {
     const result = await client.callTool({
       name: "read_file_lines",
@@ -486,6 +501,40 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     expect(text).toContain("20: Line 20 content");
   });
 
+  it("reads last N lines with negative start_line", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: -3 },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("Lines 18-20 of 20 total lines");
+    expect(text).toContain("18: Line 18 content");
+    expect(text).toContain("19: Line 19 content");
+    expect(text).toContain("20: Line 20 content");
+    expect(text).not.toContain("17: Line 17 content");
+  });
+
+  it("clamps negative start_line to line 1 when it exceeds file length", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: -500 },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("Lines 1-20 of 20 total lines");
+    expect(text).toContain("1: Line 1 content");
+    expect(text).toContain("20: Line 20 content");
+  });
+
+  it("returns error when end_line is used with negative start_line", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: -5, end_line: 10 },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("end_line cannot be used with negative start_line");
+  });
+
   it("returns error when start_line exceeds total lines", async () => {
     const result = await client.callTool({
       name: "read_file_lines",
@@ -493,7 +542,7 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     });
     expect(result.isError).toBe(true);
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain("exceeds total line count");
+    expect(text).toContain("beyond total line count");
   });
 
   it("returns error when end_line < start_line", async () => {
@@ -506,14 +555,15 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     expect(text).toContain("end_line must be >= start_line");
   });
 
-  it("returns error when line range exceeds maximum", async () => {
+  it("returns error when resolved line range exceeds maximum", async () => {
+    // large.md has 600 lines; requesting all of them exceeds MAX_LINES_PER_PARTIAL_READ (500)
     const result = await client.callTool({
       name: "read_file_lines",
-      arguments: { path: "multiline.md", start_line: 1, end_line: 10000 },
+      arguments: { path: "large.md", start_line: 1 },
     });
     expect(result.isError).toBe(true);
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain("Line range too large");
+    expect(text).toContain("exceeds maximum");
   });
 
   it("blocks hidden directory access via read_file_lines", async () => {
@@ -536,66 +586,30 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     expect(text).toContain("traversal");
   });
 
-  // --- tail_file tests ---
-
-  it("reads the last N lines of a file", async () => {
+  it("rejects binary files in read_file_lines", async () => {
     const result = await client.callTool({
-      name: "tail_file",
-      arguments: { path: "multiline.md", lines: 3 },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain("Last 3 of 20 total lines");
-    expect(text).toContain("18: Line 18 content");
-    expect(text).toContain("19: Line 19 content");
-    expect(text).toContain("20: Line 20 content");
-    expect(text).not.toContain("17: Line 17 content");
-  });
-
-  it("returns all lines when requested count exceeds total", async () => {
-    const result = await client.callTool({
-      name: "tail_file",
-      arguments: { path: "multiline.md", lines: 500 },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain("Last 20 of 20 total lines");
-    expect(text).toContain("1: Line 1 content");
-    expect(text).toContain("20: Line 20 content");
-  });
-
-  it("uses default line count when lines param is omitted", async () => {
-    const result = await client.callTool({
-      name: "tail_file",
-      arguments: { path: "multiline.md" },
-    });
-    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    // Default is 50, file has 20 lines → returns all 20
-    expect(text).toContain("Last 20 of 20 total lines");
-  });
-
-  it("blocks hidden directory access via tail_file", async () => {
-    const result = await client.callTool({
-      name: "tail_file",
-      arguments: { path: ".claude/skills/test-skill.md", lines: 5 },
+      name: "read_file_lines",
+      arguments: { path: "binary.dat", start_line: 1, end_line: 5 },
     });
     expect(result.isError).toBe(true);
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain("not allowed");
+    expect(text).toContain("Binary file detected");
   });
 
-  it("returns error for path traversal in tail_file", async () => {
+  it("rejects binary files in read_file", async () => {
     const result = await client.callTool({
-      name: "tail_file",
-      arguments: { path: "../../etc/passwd", lines: 10 },
+      name: "read_file",
+      arguments: { path: "binary.dat" },
     });
     expect(result.isError).toBe(true);
     const text = (result.content as Array<{ type: string; text: string }>)[0].text;
-    expect(text).toContain("traversal");
+    expect(text).toContain("Binary file detected");
   });
 
-  it("returns error for nonexistent file in tail_file", async () => {
+  it("returns error for nonexistent file in read_file_lines", async () => {
     const result = await client.callTool({
-      name: "tail_file",
-      arguments: { path: "does-not-exist.md", lines: 5 },
+      name: "read_file_lines",
+      arguments: { path: "does-not-exist.md", start_line: -5 },
     });
     expect(result.isError).toBe(true);
   });

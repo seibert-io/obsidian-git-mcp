@@ -26,19 +26,19 @@ Read file content from the vault. Supports batch reads.
 - **Returns (batch)**: Batch-formatted results with headers per file
 
 ### `read_file_lines`
-Read a specific range of lines from a file. Returns numbered lines with a header showing the range and total line count. Useful for reading frontmatter/headers or sequentially processing large files without returning the entire content.
-- **Input**: `{ path: string, start_line: number, end_line: number }` — both 1-based, inclusive
+Read a range of lines from a file. Returns numbered lines with a header showing the range and total line count. Supports negative `start_line` for reading from the end (like Python's negative indexing). Useful for reading frontmatter, tailing logs, or sequentially processing large files.
+- **Input**: `{ path: string, start_line: number, end_line?: number }`
+  - `start_line`: 1-based. Positive = from start, negative = from end (`-50` = last 50 lines)
+  - `end_line`: 1-based, inclusive. Omit to read to end of file. Cannot be used with negative `start_line`
 - **Returns**: Header line (`Lines 3-5 of 200 total lines in path:`) followed by numbered lines (`3: content`)
-- **Clamping**: `end_line` is clamped to the actual line count; `start_line` beyond the file returns an error
-- **Limits**: Max 5000 lines per request (`MAX_LINE_RANGE`)
-- **Errors**: `end_line < start_line`, range exceeds max, path traversal, file too large, file not found
-
-### `tail_file`
-Read the last N lines of a file (like the `tail` command). Returns numbered lines with a header showing the count and total line count. Useful for checking recent entries in logs, journals, or append-heavy files.
-- **Input**: `{ path: string, lines?: number }` — `lines` defaults to 50, max 500
-- **Returns**: Header line (`Last 50 of 200 total lines in path:`) followed by numbered lines (`151: content`)
-- **Clamping**: If `lines` exceeds the file's total line count, all lines are returned
-- **Errors**: path traversal, file too large, file not found
+- **Clamping**: `end_line` is clamped to actual line count; negative `start_line` is clamped to line 1
+- **Limits**: Max 500 lines per request (`MAX_LINES_PER_PARTIAL_READ`)
+- **Examples**:
+  - Head (first 20 lines): `{ path: "note.md", start_line: 1, end_line: 20 }`
+  - Tail (last 50 lines): `{ path: "note.md", start_line: -50 }`
+  - Middle range: `{ path: "note.md", start_line: 100, end_line: 200 }`
+  - From line to end: `{ path: "note.md", start_line: 100 }`
+- **Errors**: `end_line < start_line`, `end_line` with negative `start_line`, range exceeds max, path traversal, file too large, file not found
 
 ### `write_file`
 Create or overwrite files in the vault. Auto-creates parent directories. Triggers git commit+push. Supports batch writes.
