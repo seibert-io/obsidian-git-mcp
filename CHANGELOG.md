@@ -1,3 +1,11 @@
+# [1.4.0](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.3.1...v1.4.0) (2026-02-10)
+
+
+### Features
+
+* add read_file_lines tool for partial file reading ([#5](https://github.com/seibert-io/obsidian-git-mcp/issues/5)) ([4277594](https://github.com/seibert-io/obsidian-git-mcp/commit/4277594f9f3ef1367b7a9f06160c91ea202c2be3))
+* add tool annotations and preview recommendations for write operations ([#6](https://github.com/seibert-io/obsidian-git-mcp/issues/6)) ([5356c97](https://github.com/seibert-io/obsidian-git-mcp/commit/5356c97b8844382a691483136de62ca9493fe499))
+
 ## [1.3.1](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.3.0...v1.3.1) (2026-02-09)
 
 
