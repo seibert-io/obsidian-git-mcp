@@ -15,9 +15,9 @@ const INSTRUCTIONS =
   "When working in a specific subdirectory of this vault, also use the `get_claude_context` tool " +
   "with that directory path to discover additional CLAUDE.md instructions that may apply to that area.\n\n" +
   "PREVIEW BEFORE WRITING: You SHOULD present planned changes to the user for review before calling any tool that modifies the vault " +
-  "(write_file, edit_file, delete_file, rename_file, create_directory). For file creation or edits, show the resulting content — " +
+  "(write_file, edit_file, delete_file, rename_file, move_file, move_directory, create_directory). For file creation or edits, show the resulting content — " +
   "for small files the complete content, for large files a relevant excerpt. " +
-  "For deletions and renames, clearly state which files are affected. " +
+  "For deletions, renames, and moves, clearly state which files are affected. " +
   "This is a recommendation to improve user transparency — the server does not enforce it.";
 
 export async function createMcpServer(config: Config): Promise<McpServer> {
