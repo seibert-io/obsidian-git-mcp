@@ -37,6 +37,10 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     await mkdir(path.join(resolvedVault, "subfolder"), { recursive: true });
     await writeFile(path.join(resolvedVault, "subfolder", "nested.md"), "Nested note with [[hello]] link.\n");
 
+    // Create a multi-line file for read_file_lines / tail_file tests
+    const multiLineContent = Array.from({ length: 20 }, (_, i) => `Line ${i + 1} content`).join("\n");
+    await writeFile(path.join(resolvedVault, "multiline.md"), multiLineContent);
+
     // Create .claude directory that should be hidden from all listings/searches
     await mkdir(path.join(resolvedVault, ".claude", "skills"), { recursive: true });
     await writeFile(path.join(resolvedVault, ".claude", "skills", "test-skill.md"), "# Skill file\n");
@@ -142,6 +146,8 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     const result = await client.listTools();
     const toolNames = result.tools.map((t) => t.name);
     expect(toolNames).toContain("read_file");
+    expect(toolNames).toContain("read_file_lines");
+    expect(toolNames).toContain("tail_file");
     expect(toolNames).toContain("write_file");
     expect(toolNames).toContain("edit_file");
     expect(toolNames).toContain("delete_file");
@@ -449,6 +455,147 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     const result = await client.callTool({
       name: "read_file",
       arguments: { paths: [] },
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  // --- read_file_lines tests ---
+
+  it("reads a specific line range from a file", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 3, end_line: 5 },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("Lines 3-5 of 20 total lines");
+    expect(text).toContain("3: Line 3 content");
+    expect(text).toContain("4: Line 4 content");
+    expect(text).toContain("5: Line 5 content");
+    expect(text).not.toContain("2: Line 2 content");
+    expect(text).not.toContain("6: Line 6 content");
+  });
+
+  it("clamps end_line to total line count", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 18, end_line: 100 },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("Lines 18-20 of 20 total lines");
+    expect(text).toContain("18: Line 18 content");
+    expect(text).toContain("20: Line 20 content");
+  });
+
+  it("returns error when start_line exceeds total lines", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 100, end_line: 200 },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("exceeds total line count");
+  });
+
+  it("returns error when end_line < start_line", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 10, end_line: 5 },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("end_line must be >= start_line");
+  });
+
+  it("returns error when line range exceeds maximum", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "multiline.md", start_line: 1, end_line: 10000 },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("Line range too large");
+  });
+
+  it("blocks hidden directory access via read_file_lines", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: ".claude/skills/test-skill.md", start_line: 1, end_line: 10 },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("not allowed");
+  });
+
+  it("returns error for path traversal in read_file_lines", async () => {
+    const result = await client.callTool({
+      name: "read_file_lines",
+      arguments: { path: "../../etc/passwd", start_line: 1, end_line: 10 },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("traversal");
+  });
+
+  // --- tail_file tests ---
+
+  it("reads the last N lines of a file", async () => {
+    const result = await client.callTool({
+      name: "tail_file",
+      arguments: { path: "multiline.md", lines: 3 },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("Last 3 of 20 total lines");
+    expect(text).toContain("18: Line 18 content");
+    expect(text).toContain("19: Line 19 content");
+    expect(text).toContain("20: Line 20 content");
+    expect(text).not.toContain("17: Line 17 content");
+  });
+
+  it("returns all lines when requested count exceeds total", async () => {
+    const result = await client.callTool({
+      name: "tail_file",
+      arguments: { path: "multiline.md", lines: 500 },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("Last 20 of 20 total lines");
+    expect(text).toContain("1: Line 1 content");
+    expect(text).toContain("20: Line 20 content");
+  });
+
+  it("uses default line count when lines param is omitted", async () => {
+    const result = await client.callTool({
+      name: "tail_file",
+      arguments: { path: "multiline.md" },
+    });
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    // Default is 50, file has 20 lines → returns all 20
+    expect(text).toContain("Last 20 of 20 total lines");
+  });
+
+  it("blocks hidden directory access via tail_file", async () => {
+    const result = await client.callTool({
+      name: "tail_file",
+      arguments: { path: ".claude/skills/test-skill.md", lines: 5 },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("not allowed");
+  });
+
+  it("returns error for path traversal in tail_file", async () => {
+    const result = await client.callTool({
+      name: "tail_file",
+      arguments: { path: "../../etc/passwd", lines: 10 },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as Array<{ type: string; text: string }>)[0].text;
+    expect(text).toContain("traversal");
+  });
+
+  it("returns error for nonexistent file in tail_file", async () => {
+    const result = await client.callTool({
+      name: "tail_file",
+      arguments: { path: "does-not-exist.md", lines: 5 },
     });
     expect(result.isError).toBe(true);
   });

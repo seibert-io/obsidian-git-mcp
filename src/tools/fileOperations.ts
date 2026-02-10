@@ -9,19 +9,81 @@ import { validateBatchSize, formatBatchResults, MAX_BATCH_SIZE } from "../utils/
 import type { BatchResult } from "../utils/batchUtils.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
 import { logger } from "../utils/logger.js";
-import { MAX_FILE_SIZE } from "../utils/constants.js";
+import { MAX_FILE_SIZE, MAX_TAIL_LINES, MAX_LINE_RANGE } from "../utils/constants.js";
+
+async function readValidatedContent(
+  vaultPath: string,
+  filePath: string,
+): Promise<{ content: string } | { error: string }> {
+  const resolved = await resolveVaultPathSafe(vaultPath, filePath);
+  const fileStat = await stat(resolved);
+  if (fileStat.size > MAX_FILE_SIZE) {
+    return { error: `File too large (${fileStat.size} bytes, max ${MAX_FILE_SIZE})` };
+  }
+  return { content: await readFile(resolved, "utf-8") };
+}
 
 async function readSingleFile(vaultPath: string, filePath: string): Promise<BatchResult> {
   try {
-    const resolved = await resolveVaultPathSafe(vaultPath, filePath);
-    const fileStat = await stat(resolved);
-    if (fileStat.size > MAX_FILE_SIZE) {
-      return { index: 0, path: filePath, success: false, content: `File too large (${fileStat.size} bytes, max ${MAX_FILE_SIZE})` };
+    const result = await readValidatedContent(vaultPath, filePath);
+    if ("error" in result) {
+      return { index: 0, path: filePath, success: false, content: result.error };
     }
-    const content = await readFile(resolved, "utf-8");
-    return { index: 0, path: filePath, success: true, content };
+    return { index: 0, path: filePath, success: true, content: result.content };
   } catch (error) {
     return { index: 0, path: filePath, success: false, content: getErrorMessage(error) };
+  }
+}
+
+async function readLineRange(
+  vaultPath: string,
+  filePath: string,
+  startLine: number,
+  endLine: number,
+): Promise<{ success: boolean; content: string }> {
+  try {
+    const result = await readValidatedContent(vaultPath, filePath);
+    if ("error" in result) {
+      return { success: false, content: result.error };
+    }
+    const lines = result.content.split("\n");
+    const totalLines = lines.length;
+
+    if (startLine > totalLines) {
+      return { success: false, content: `start_line ${startLine} exceeds total line count (${totalLines})` };
+    }
+
+    const end = Math.min(totalLines, endLine);
+    const selectedLines = lines.slice(startLine - 1, end);
+    const numbered = selectedLines.map((line, i) => `${startLine + i}: ${line}`).join("\n");
+    const header = `Lines ${startLine}-${end} of ${totalLines} total lines in ${filePath}:`;
+    return { success: true, content: `${header}\n${numbered}` };
+  } catch (error) {
+    return { success: false, content: getErrorMessage(error) };
+  }
+}
+
+async function readTail(
+  vaultPath: string,
+  filePath: string,
+  lineCount: number,
+): Promise<{ success: boolean; content: string }> {
+  try {
+    const result = await readValidatedContent(vaultPath, filePath);
+    if ("error" in result) {
+      return { success: false, content: result.error };
+    }
+    const lines = result.content.split("\n");
+    const totalLines = lines.length;
+
+    const count = Math.min(lineCount, totalLines);
+    const startLine = totalLines - count + 1;
+    const selectedLines = lines.slice(-count);
+    const numbered = selectedLines.map((line, i) => `${startLine + i}: ${line}`).join("\n");
+    const header = `Last ${count} of ${totalLines} total lines in ${filePath}:`;
+    return { success: true, content: `${header}\n${numbered}` };
+  } catch (error) {
+    return { success: false, content: getErrorMessage(error) };
   }
 }
 
@@ -106,6 +168,58 @@ export function registerFileOperations(server: McpServer, config: Config): void 
         }),
       );
       return toolSuccess(formatBatchResults(results));
+    },
+  );
+
+  // read_file_lines
+  server.registerTool(
+    "read_file_lines",
+    {
+      description:
+        "Read a specific range of lines from a file. Returns numbered lines with a header showing the range and total line count. " +
+        "Useful for reading frontmatter, headers, or sequentially processing large files without returning the entire content.",
+      inputSchema: {
+        path: z.string().describe("Path relative to vault root"),
+        start_line: z.number().int().min(1).describe("First line to read (1-based, inclusive)"),
+        end_line: z.number().int().min(1).describe("Last line to read (1-based, inclusive)"),
+      },
+    },
+    async ({ path: filePath, start_line, end_line }) => {
+      if (end_line < start_line) {
+        return toolError("end_line must be >= start_line");
+      }
+      if (end_line - start_line + 1 > MAX_LINE_RANGE) {
+        return toolError(`Line range too large (max ${MAX_LINE_RANGE} lines per request)`);
+      }
+      const result = await readLineRange(config.vaultPath, filePath, start_line, end_line);
+      if (!result.success) {
+        logger.error("read_file_lines failed", { path: filePath, error: result.content });
+        return toolError(`Failed to read file lines: ${result.content}`);
+      }
+      return toolSuccess(result.content);
+    },
+  );
+
+  // tail_file
+  server.registerTool(
+    "tail_file",
+    {
+      description:
+        "Read the last N lines of a file (like the 'tail' command). Returns numbered lines with a header showing the count and total line count. " +
+        "Useful for checking recent entries in logs, journals, or append-heavy files.",
+      inputSchema: {
+        path: z.string().describe("Path relative to vault root"),
+        lines: z.number().int().min(1).max(MAX_TAIL_LINES).default(50)
+          .describe(`Number of lines to read from the end (default: 50, max: ${MAX_TAIL_LINES})`),
+      },
+    },
+    async ({ path: filePath, lines: lineCount }) => {
+      const result = await readTail(config.vaultPath, filePath, lineCount);
+      if (!result.success) {
+        logger.error("tail_file failed", { path: filePath, error: result.content });
+        return toolError(`Failed to tail file: ${result.content}`);
+      }
+      return toolSuccess(result.content);
     },
   );
 
