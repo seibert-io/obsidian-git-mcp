@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.4.0...v1.5.0) (2026-02-10)
+
+
+### Features
+
+* add move_file, move_directory, is_directory tools and migrate rename_file to git mv ([#7](https://github.com/seibert-io/obsidian-git-mcp/issues/7)) ([de1fa5d](https://github.com/seibert-io/obsidian-git-mcp/commit/de1fa5da0e461d3f4847b5e12aba0efad04290c0))
+
 # [1.4.0](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.3.1...v1.4.0) (2026-02-10)
 
 

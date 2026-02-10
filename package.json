@@ -1,6 +1,6 @@
 {
   "name": "obsidian-vault-mcp-server",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Dockerized Remote MCP Server exposing a Git-synced Obsidian vault via filesystem tools over Streamable HTTP",
   "type": "module",
   "main": "dist/index.js",
