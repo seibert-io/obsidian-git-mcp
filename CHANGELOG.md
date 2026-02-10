@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.5.0...v1.6.0) (2026-02-10)
+
+
+### Features
+
+* enforce explicit change previews before write operations ([#8](https://github.com/seibert-io/obsidian-git-mcp/issues/8)) ([e595b04](https://github.com/seibert-io/obsidian-git-mcp/commit/e595b04245d350ceeaec971323296a3b0e64a227))
+
 # [1.5.0](https://github.com/seibert-io/obsidian-git-mcp/compare/v1.4.0...v1.5.0) (2026-02-10)
 
 
