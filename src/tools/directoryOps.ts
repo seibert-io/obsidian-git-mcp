@@ -162,7 +162,7 @@ export function registerDirectoryOps(server: McpServer, config: Config): void {
       description:
         "Create a directory in the vault (including parent directories). " +
         "Creates the full directory chain recursively — multiple levels can be created at once. " +
-        "Clients SHOULD inform the user which directory will be created before calling this tool.",
+        "IMPORTANT — Before calling this tool, state the full directory path that will be created so the user can confirm. Do not skip this preview step.",
       inputSchema: {
         path: z.string().describe("Path relative to vault root"),
       },
@@ -217,7 +217,7 @@ export function registerDirectoryOps(server: McpServer, config: Config): void {
         "Move a directory and all its contents to a new location using git mv to preserve git history. " +
         "The target parent directory must already exist — use create_directory first if needed. " +
         "Triggers git commit and push. " +
-        "Clients SHOULD inform the user about the source and destination paths before calling this tool.",
+        "IMPORTANT — Before calling this tool, present both the current directory path and the new directory path to the user so they can review the move. Do not skip this preview step.",
       annotations: { destructiveHint: true },
       inputSchema: {
         old_path: z.string().describe("Current directory path relative to vault root"),

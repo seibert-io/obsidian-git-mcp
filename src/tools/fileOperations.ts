@@ -199,7 +199,9 @@ export function registerFileOperations(server: McpServer, config: Config): void 
     {
       description:
         "Create or overwrite files in the vault. Supports batch writes via 'files' array (max 10, single git commit). " +
-        "Clients SHOULD present the intended file content to the user for review before calling this tool — for small files the full content, for large files a representative excerpt.",
+        "IMPORTANT — Before calling this tool, present the intended file content to the user as rendered, formatted text directly in the conversation (not as raw Markdown source in a code block). " +
+        "For small files show the complete content; for large files show a representative excerpt. " +
+        "Clearly state which file path will be created or overwritten. Do not skip this preview step.",
       annotations: { destructiveHint: true },
       inputSchema: {
         path: z.string().optional().describe("Path relative to vault root (single file)"),
@@ -253,7 +255,9 @@ export function registerFileOperations(server: McpServer, config: Config): void 
     {
       description:
         "Find-and-replace in files. old_text must match exactly once per file. Supports batch edits via 'edits' array (max 10, single git commit). " +
-        "Clients SHOULD show the user how the file will look after the edit before calling this tool — for small files the full resulting content, for large files a relevant excerpt around the changed section.",
+        "IMPORTANT — Before calling this tool, show the user how the file will look after the edit, rendered as formatted text directly in the conversation (not as raw Markdown source in a code block). " +
+        "For small files show the full resulting content; for large files show a relevant excerpt around the changed section. " +
+        "Clearly indicate which file is being edited and what is changing. Do not skip this preview step.",
       annotations: { destructiveHint: true },
       inputSchema: {
         path: z.string().optional().describe("Path relative to vault root (single file)"),
@@ -309,7 +313,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
     {
       description:
         "Delete a file from the vault. Triggers git commit and push. " +
-        "Clients SHOULD inform the user which file will be deleted before calling this tool.",
+        "IMPORTANT — Before calling this tool, clearly state the full path of the file that will be deleted and briefly describe its content or purpose so the user can confirm. Do not skip this preview step.",
       annotations: { destructiveHint: true },
       inputSchema: {
         path: z.string().describe("Path relative to vault root"),
@@ -337,7 +341,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
         "Move or rename a file in the vault using git mv to preserve git history. " +
         "The target parent directory must already exist — use create_directory first if needed. " +
         "Triggers git commit and push. " +
-        "Clients SHOULD inform the user about the source and destination paths before calling this tool.",
+        "IMPORTANT — Before calling this tool, present both the current path and the new path to the user so they can review the move/rename. Do not skip this preview step.",
       annotations: { destructiveHint: true },
       inputSchema: {
         old_path: z.string().describe("Current path relative to vault root"),
@@ -381,7 +385,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
         "Move a file to a new location using git mv to preserve git history. " +
         "The target directory must already exist — use create_directory first if needed. " +
         "Triggers git commit and push. " +
-        "Clients SHOULD inform the user about the source and destination paths before calling this tool.",
+        "IMPORTANT — Before calling this tool, present both the current path and the new path to the user so they can review the move. Do not skip this preview step.",
       annotations: { destructiveHint: true },
       inputSchema: {
         old_path: z.string().describe("Current file path relative to vault root"),
