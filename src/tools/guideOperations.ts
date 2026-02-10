@@ -12,6 +12,7 @@ export function registerGuideOperations(server: McpServer, config: Config): void
       description:
         "IMPORTANT: Call this tool once at the start of every conversation — before using any other tools from this server — with topic 'conventions' to load vault-specific instructions and conventions. " +
         "Also returns best-practice guides for link syntax, frontmatter, note templates, and search strategies.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         topic: z.enum(["conventions", "create-note", "search-strategy", "all"])
           .describe("Which guide to retrieve. Use 'conventions' at session start. Use 'all' to get everything at once."),

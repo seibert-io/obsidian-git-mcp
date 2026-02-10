@@ -51,6 +51,7 @@ export function registerVaultOperations(server: McpServer, config: Config): void
     "get_vault_info",
     {
       description: "Return vault statistics: total files, markdown files, folder structure, last sync time",
+      annotations: { readOnlyHint: true },
     },
     async () => {
       try {
@@ -80,6 +81,7 @@ export function registerVaultOperations(server: McpServer, config: Config): void
     "get_backlinks",
     {
       description: "Find all notes that link to a given note using [[filename]] or [[filename|alias]] patterns",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         path: z.string().describe("Path of the target note, relative to vault root"),
       },
@@ -142,6 +144,7 @@ export function registerVaultOperations(server: McpServer, config: Config): void
     "get_tags",
     {
       description: "Extract all tags from the vault or a specific file. Parses #tag syntax and YAML frontmatter tags.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         path: z.string().optional().describe("Specific file path (relative to vault root). If omitted, scans entire vault."),
       },

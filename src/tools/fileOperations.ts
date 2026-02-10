@@ -129,6 +129,7 @@ export function registerFileOperations(server: McpServer, config: Config): void 
     "read_file",
     {
       description: "Read file content from the vault. Supports batch reads via 'paths' array (max 10).",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         path: z.string().optional().describe("Path relative to vault root (single file)"),
         paths: z.array(z.string()).max(MAX_BATCH_SIZE).optional().describe("Multiple paths for batch read (max 10)"),
@@ -195,7 +196,10 @@ export function registerFileOperations(server: McpServer, config: Config): void 
   server.registerTool(
     "write_file",
     {
-      description: "Create or overwrite files in the vault. Supports batch writes via 'files' array (max 10, single git commit).",
+      description:
+        "Create or overwrite files in the vault. Supports batch writes via 'files' array (max 10, single git commit). " +
+        "Clients SHOULD present the intended file content to the user for review before calling this tool — for small files the full content, for large files a representative excerpt.",
+      annotations: { destructiveHint: true },
       inputSchema: {
         path: z.string().optional().describe("Path relative to vault root (single file)"),
         content: z.string().optional().describe("File content (single file)"),
@@ -246,7 +250,10 @@ export function registerFileOperations(server: McpServer, config: Config): void 
   server.registerTool(
     "edit_file",
     {
-      description: "Find-and-replace in files. old_text must match exactly once per file. Supports batch edits via 'edits' array (max 10, single git commit).",
+      description:
+        "Find-and-replace in files. old_text must match exactly once per file. Supports batch edits via 'edits' array (max 10, single git commit). " +
+        "Clients SHOULD show the user how the file will look after the edit before calling this tool — for small files the full resulting content, for large files a relevant excerpt around the changed section.",
+      annotations: { destructiveHint: true },
       inputSchema: {
         path: z.string().optional().describe("Path relative to vault root (single file)"),
         old_text: z.string().optional().describe("Exact text to find (must match exactly once)"),
@@ -299,7 +306,10 @@ export function registerFileOperations(server: McpServer, config: Config): void 
   server.registerTool(
     "delete_file",
     {
-      description: "Delete a file from the vault. Triggers git commit and push.",
+      description:
+        "Delete a file from the vault. Triggers git commit and push. " +
+        "Clients SHOULD inform the user which file will be deleted before calling this tool.",
+      annotations: { destructiveHint: true },
       inputSchema: {
         path: z.string().describe("Path relative to vault root"),
       },
@@ -322,7 +332,10 @@ export function registerFileOperations(server: McpServer, config: Config): void 
   server.registerTool(
     "rename_file",
     {
-      description: "Move or rename a file in the vault. Triggers git commit and push.",
+      description:
+        "Move or rename a file in the vault. Triggers git commit and push. " +
+        "Clients SHOULD inform the user about the source and destination paths before calling this tool.",
+      annotations: { destructiveHint: true },
       inputSchema: {
         old_path: z.string().describe("Current path relative to vault root"),
         new_path: z.string().describe("New path relative to vault root"),

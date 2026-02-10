@@ -12,6 +12,7 @@ export function registerClaudeContextOperations(server: McpServer, config: Confi
         "Returns CLAUDE.md instruction files found along the path from vault root to the specified directory. " +
         "Use this tool before working in a specific vault subdirectory or a file in any subdirectory to get directory-specific instructions and conventions. " +
         "The root CLAUDE.md (delivered via get_obsidian_guide) is not included — only subdirectory-level CLAUDE.md files.",
+      annotations: { readOnlyHint: true },
       inputSchema: {
         path: z.string().describe("Vault-relative directory path to get context for (e.g. 'projects/webapp')"),
       },
