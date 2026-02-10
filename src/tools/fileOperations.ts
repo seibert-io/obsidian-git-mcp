@@ -14,17 +14,17 @@ import { MAX_FILE_SIZE, MAX_LINES_PER_PARTIAL_READ } from "../utils/constants.js
 async function readValidatedContent(
   vaultPath: string,
   filePath: string,
-): Promise<{ content: string } | { error: string }> {
-  const resolved = await resolveVaultPathSafe(vaultPath, filePath);
-  const fileStat = await stat(resolved);
+): Promise<{ content: string; resolvedPath: string } | { error: string }> {
+  const resolvedPath = await resolveVaultPathSafe(vaultPath, filePath);
+  const fileStat = await stat(resolvedPath);
   if (fileStat.size > MAX_FILE_SIZE) {
     return { error: `File too large (${fileStat.size} bytes, max ${MAX_FILE_SIZE})` };
   }
-  const content = await readFile(resolved, "utf-8");
+  const content = await readFile(resolvedPath, "utf-8");
   if (content.includes("\0")) {
     return { error: "Binary file detected (contains null bytes)" };
   }
-  return { content };
+  return { content, resolvedPath };
 }
 
 async function readSingleFile(vaultPath: string, filePath: string): Promise<BatchResult> {
@@ -102,14 +102,12 @@ async function editSingleFile(
   newText: string,
 ): Promise<BatchResult> {
   try {
-    const resolved = await resolveVaultPathSafe(vaultPath, filePath);
-    const fileStat = await stat(resolved);
-    if (fileStat.size > MAX_FILE_SIZE) {
-      return { index: 0, path: filePath, success: false, content: `File too large (${fileStat.size} bytes, max ${MAX_FILE_SIZE})` };
+    const result = await readValidatedContent(vaultPath, filePath);
+    if ("error" in result) {
+      return { index: 0, path: filePath, success: false, content: result.error };
     }
-    const content = await readFile(resolved, "utf-8");
 
-    const occurrences = content.split(oldText).length - 1;
+    const occurrences = result.content.split(oldText).length - 1;
     if (occurrences === 0) {
       return { index: 0, path: filePath, success: false, content: "old_text not found in file" };
     }
@@ -117,8 +115,8 @@ async function editSingleFile(
       return { index: 0, path: filePath, success: false, content: `old_text found ${occurrences} times, must match exactly once` };
     }
 
-    const newContent = content.replace(oldText, () => newText);
-    await writeFile(resolved, newContent, "utf-8");
+    const newContent = result.content.replace(oldText, () => newText);
+    await writeFile(result.resolvedPath, newContent, "utf-8");
     return { index: 0, path: filePath, success: true, content: `File edited: ${filePath}` };
   } catch (error) {
     return { index: 0, path: filePath, success: false, content: getErrorMessage(error) };
