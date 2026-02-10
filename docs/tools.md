@@ -15,19 +15,27 @@ All tools declare [MCP tool annotations](https://modelcontextprotocol.io/specifi
 
 `create_directory` has no annotation hints set (it modifies the vault but is not destructive).
 
-### Preview Recommendation for Write Operations
+### Change Preview Requirement for Write Operations
 
-The server recommends (via tool descriptions and server instructions) that clients **present planned changes to the user before executing** any write operation:
+The server **strongly recommends** (via tool descriptions and server-level instructions) that clients **present all planned changes to the user in a clear, readable format before executing** any write operation. This is not optional boilerplate — skipping previews significantly degrades the user experience. Clients that omit previews are not meeting the expected standard of transparency.
 
-- **`write_file`**: Show the intended file content — full content for small files, a representative excerpt for large ones
-- **`edit_file`**: Show how the file will look after the edit — full resulting content for small files, a relevant excerpt around the changed section for large ones
-- **`delete_file`**: State which file will be deleted and confirm the action
-- **`rename_file`**: State the source and destination paths
-- **`move_file`**: State the source and destination paths
-- **`move_directory`**: State the source and destination directory paths
-- **`create_directory`**: State which directory will be created
+#### Formatting guidance
 
-This is a **recommendation**, not enforcement — the server has no mechanism to block execution. Clients that support human-in-the-loop confirmation (e.g., via `destructiveHint`) should use these signals to prompt for user review.
+For `write_file` and `edit_file`, the preview **must** be output as rendered, formatted text directly in the conversation — **not** as raw Markdown source inside a code block. Users read rendered prose far more easily than Markdown syntax. Raw source is acceptable only for non-Markdown file types (e.g., YAML frontmatter, code files) where rendering would not improve readability.
+
+#### Per-tool preview expectations
+
+- **`write_file`**: Show the intended file content as rendered text. For small files, present the complete content. For large files, present a representative excerpt. Clearly state which file path will be created or overwritten.
+- **`edit_file`**: Show how the file will look after the edit as rendered text. For small files, present the full resulting content. For large files, present a relevant excerpt around the changed section. Clearly indicate which file is being edited and what is changing.
+- **`delete_file`**: State the full path of the file that will be deleted and briefly describe its content or purpose so the user can confirm.
+- **`rename_file`**: Show both the current path and the new path side by side.
+- **`move_file`**: Show both the current file path and the new file path side by side.
+- **`move_directory`**: Show both the current directory path and the new directory path side by side.
+- **`create_directory`**: State the full directory path that will be created.
+
+#### Enforcement
+
+The server has no mechanism to block execution if a client skips the preview. However, the preview requirement is communicated in three places — server instructions, individual tool descriptions, and `destructiveHint` annotations — to maximize the likelihood that clients respect it. Clients that support human-in-the-loop confirmation (e.g., via `destructiveHint`) should use these signals to prompt for user review.
 
 ## Batch Operations
 
