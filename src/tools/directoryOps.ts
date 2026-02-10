@@ -4,6 +4,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { resolveVaultPathSafe, isInsideVault } from "../utils/pathValidation.js";
+import { scheduleSync } from "../git/debouncedSync.js";
+import { git } from "../git/gitSync.js";
 import { validateBatchSize, formatBatchResults, MAX_BATCH_SIZE } from "../utils/batchUtils.js";
 import type { BatchResult } from "../utils/batchUtils.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
@@ -159,6 +161,7 @@ export function registerDirectoryOps(server: McpServer, config: Config): void {
     {
       description:
         "Create a directory in the vault (including parent directories). " +
+        "Creates the full directory chain recursively — multiple levels can be created at once. " +
         "Clients SHOULD inform the user which directory will be created before calling this tool.",
       inputSchema: {
         path: z.string().describe("Path relative to vault root"),
@@ -173,6 +176,85 @@ export function registerDirectoryOps(server: McpServer, config: Config): void {
         const msg = getErrorMessage(error);
         logger.error("create_directory failed", { path: dirPath, error: msg });
         return toolError(`Failed to create directory: ${msg}`);
+      }
+    },
+  );
+
+  // is_directory
+  server.registerTool(
+    "is_directory",
+    {
+      description: "Check whether a path exists and is a directory in the vault.",
+      annotations: { readOnlyHint: true },
+      inputSchema: {
+        path: z.string().describe("Path relative to vault root"),
+      },
+    },
+    async ({ path: dirPath }) => {
+      try {
+        const resolved = await resolveVaultPathSafe(config.vaultPath, dirPath);
+        const fileStat = await stat(resolved);
+        if (fileStat.isDirectory()) {
+          return toolSuccess(`Directory exists: ${dirPath}`);
+        }
+        return toolSuccess(`Path exists but is not a directory: ${dirPath}`);
+      } catch (error) {
+        if (error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT") {
+          return toolSuccess(`Directory does not exist: ${dirPath}`);
+        }
+        const msg = getErrorMessage(error);
+        logger.error("is_directory failed", { path: dirPath, error: msg });
+        return toolError(`Failed to check directory: ${msg}`);
+      }
+    },
+  );
+
+  // move_directory
+  server.registerTool(
+    "move_directory",
+    {
+      description:
+        "Move a directory and all its contents to a new location using git mv to preserve git history. " +
+        "The target parent directory must already exist — use create_directory first if needed. " +
+        "Triggers git commit and push. " +
+        "Clients SHOULD inform the user about the source and destination paths before calling this tool.",
+      annotations: { destructiveHint: true },
+      inputSchema: {
+        old_path: z.string().describe("Current directory path relative to vault root"),
+        new_path: z.string().describe("New directory path relative to vault root"),
+      },
+    },
+    async ({ old_path, new_path }) => {
+      try {
+        const resolvedOld = await resolveVaultPathSafe(config.vaultPath, old_path);
+        const resolvedNew = await resolveVaultPathSafe(config.vaultPath, new_path);
+
+        // Verify source exists and is a directory
+        const srcStat = await stat(resolvedOld);
+        if (!srcStat.isDirectory()) {
+          return toolError(`Source is not a directory: ${old_path}. Use move_file for files.`);
+        }
+
+        // Verify target parent directory exists
+        const targetParent = path.dirname(resolvedNew);
+        try {
+          const parentStat = await stat(targetParent);
+          if (!parentStat.isDirectory()) {
+            return toolError(`Target parent path is not a directory: ${path.dirname(new_path)}`);
+          }
+        } catch {
+          return toolError(`Target parent directory does not exist: ${path.dirname(new_path)}. Create it first with create_directory.`);
+        }
+
+        const relOld = path.relative(config.vaultPath, resolvedOld);
+        const relNew = path.relative(config.vaultPath, resolvedNew);
+        await git(["mv", "--", relOld, relNew], config.vaultPath);
+        scheduleSync(`MCP: move directory ${old_path} -> ${new_path}`);
+        return toolSuccess(`Directory moved: ${old_path} -> ${new_path}`);
+      } catch (error) {
+        const msg = getErrorMessage(error);
+        logger.error("move_directory failed", { old_path, new_path, error: msg });
+        return toolError(`Failed to move directory: ${msg}`);
       }
     },
   );

@@ -162,6 +162,9 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     expect(toolNames).toContain("edit_file");
     expect(toolNames).toContain("delete_file");
     expect(toolNames).toContain("rename_file");
+    expect(toolNames).toContain("move_file");
+    expect(toolNames).toContain("move_directory");
+    expect(toolNames).toContain("is_directory");
     expect(toolNames).toContain("list_directory");
     expect(toolNames).toContain("create_directory");
     expect(toolNames).toContain("search_files");
@@ -691,5 +694,224 @@ describe("Integration: MCP Server over Streamable HTTP", () => {
     const text = getToolText(result);
     expect(text).toContain("File edited: edit-partial.md");
     expect(text).toContain("ERROR:");
+  });
+
+  // --- is_directory tests ---
+
+  it("is_directory returns true for existing directory", async () => {
+    const result = await client.callTool({
+      name: "is_directory",
+      arguments: { path: "subfolder" },
+    });
+    const text = getToolText(result);
+    expect(result.isError).toBeFalsy();
+    expect(text).toContain("Directory exists: subfolder");
+  });
+
+  it("is_directory returns false for nonexistent path", async () => {
+    const result = await client.callTool({
+      name: "is_directory",
+      arguments: { path: "nonexistent-folder" },
+    });
+    const text = getToolText(result);
+    expect(result.isError).toBeFalsy();
+    expect(text).toContain("Directory does not exist: nonexistent-folder");
+  });
+
+  it("is_directory reports file is not a directory", async () => {
+    const result = await client.callTool({
+      name: "is_directory",
+      arguments: { path: "hello.md" },
+    });
+    const text = getToolText(result);
+    expect(result.isError).toBeFalsy();
+    expect(text).toContain("Path exists but is not a directory: hello.md");
+  });
+
+  it("is_directory blocks path traversal", async () => {
+    const result = await client.callTool({
+      name: "is_directory",
+      arguments: { path: "../../etc" },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("traversal");
+  });
+
+  it("is_directory blocks hidden directory access", async () => {
+    const result = await client.callTool({
+      name: "is_directory",
+      arguments: { path: ".git" },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("not allowed");
+  });
+
+  // --- move_file tests ---
+
+  it("move_file moves a file using git mv", async () => {
+    // Create a file and commit it so git tracks it
+    await client.callTool({
+      name: "write_file",
+      arguments: { path: "move-source.md", content: "File to move" },
+    });
+    // Wait for debounced sync to commit the file
+    const { flushDebouncedSync } = await import("../src/git/debouncedSync.js");
+    await flushDebouncedSync();
+
+    // Create target directory
+    await client.callTool({
+      name: "create_directory",
+      arguments: { path: "move-target-dir" },
+    });
+
+    const result = await client.callTool({
+      name: "move_file",
+      arguments: { old_path: "move-source.md", new_path: "move-target-dir/move-source.md" },
+    });
+    const text = getToolText(result);
+    expect(result.isError).toBeFalsy();
+    expect(text).toContain("File moved: move-source.md -> move-target-dir/move-source.md");
+
+    // Verify file exists at new location
+    const readResult = await client.callTool({
+      name: "read_file",
+      arguments: { path: "move-target-dir/move-source.md" },
+    });
+    expect(getToolText(readResult)).toBe("File to move");
+
+    // Verify file no longer exists at old location
+    const oldResult = await client.callTool({
+      name: "read_file",
+      arguments: { path: "move-source.md" },
+    });
+    expect(oldResult.isError).toBe(true);
+  });
+
+  it("move_file fails when target directory does not exist", async () => {
+    await client.callTool({
+      name: "write_file",
+      arguments: { path: "move-nodir.md", content: "Content" },
+    });
+    const { flushDebouncedSync } = await import("../src/git/debouncedSync.js");
+    await flushDebouncedSync();
+
+    const result = await client.callTool({
+      name: "move_file",
+      arguments: { old_path: "move-nodir.md", new_path: "nonexistent-dir/move-nodir.md" },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("Target directory does not exist");
+  });
+
+  it("move_file fails when source is a directory", async () => {
+    const result = await client.callTool({
+      name: "move_file",
+      arguments: { old_path: "subfolder", new_path: "subfolder-moved" },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("not a file");
+  });
+
+  it("move_file blocks path traversal", async () => {
+    const result = await client.callTool({
+      name: "move_file",
+      arguments: { old_path: "../../etc/passwd", new_path: "stolen.txt" },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("traversal");
+  });
+
+  // --- move_directory tests ---
+
+  it("move_directory moves a directory using git mv", async () => {
+    // Create a directory with files and commit them
+    await client.callTool({
+      name: "create_directory",
+      arguments: { path: "dir-to-move" },
+    });
+    await client.callTool({
+      name: "write_file",
+      arguments: { path: "dir-to-move/file1.md", content: "File 1" },
+    });
+    await client.callTool({
+      name: "write_file",
+      arguments: { path: "dir-to-move/file2.md", content: "File 2" },
+    });
+    const { flushDebouncedSync } = await import("../src/git/debouncedSync.js");
+    await flushDebouncedSync();
+
+    const result = await client.callTool({
+      name: "move_directory",
+      arguments: { old_path: "dir-to-move", new_path: "dir-moved" },
+    });
+    const text = getToolText(result);
+    expect(result.isError).toBeFalsy();
+    expect(text).toContain("Directory moved: dir-to-move -> dir-moved");
+
+    // Verify files exist at new location
+    const read1 = await client.callTool({
+      name: "read_file",
+      arguments: { path: "dir-moved/file1.md" },
+    });
+    expect(getToolText(read1)).toBe("File 1");
+
+    const read2 = await client.callTool({
+      name: "read_file",
+      arguments: { path: "dir-moved/file2.md" },
+    });
+    expect(getToolText(read2)).toBe("File 2");
+
+    // Verify old directory no longer exists
+    const dirCheck = await client.callTool({
+      name: "is_directory",
+      arguments: { path: "dir-to-move" },
+    });
+    expect(getToolText(dirCheck)).toContain("does not exist");
+  });
+
+  it("move_directory fails when target parent directory does not exist", async () => {
+    await client.callTool({
+      name: "create_directory",
+      arguments: { path: "dir-noparent" },
+    });
+    await client.callTool({
+      name: "write_file",
+      arguments: { path: "dir-noparent/file.md", content: "Content" },
+    });
+    const { flushDebouncedSync } = await import("../src/git/debouncedSync.js");
+    await flushDebouncedSync();
+
+    const result = await client.callTool({
+      name: "move_directory",
+      arguments: { old_path: "dir-noparent", new_path: "nonexistent-parent/dir-noparent" },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("Target parent directory does not exist");
+  });
+
+  it("move_directory fails when source is a file", async () => {
+    const result = await client.callTool({
+      name: "move_directory",
+      arguments: { old_path: "hello.md", new_path: "hello-moved" },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("not a directory");
+  });
+
+  it("move_directory blocks path traversal", async () => {
+    const result = await client.callTool({
+      name: "move_directory",
+      arguments: { old_path: "../../etc", new_path: "stolen" },
+    });
+    expect(result.isError).toBe(true);
+    const text = getToolText(result);
+    expect(text).toContain("traversal");
   });
 });

@@ -1,10 +1,11 @@
-import { readFile, writeFile, unlink, rename, mkdir, stat } from "node:fs/promises";
+import { readFile, writeFile, unlink, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Config } from "../config.js";
 import { resolveVaultPathSafe } from "../utils/pathValidation.js";
 import { scheduleSync } from "../git/debouncedSync.js";
+import { git } from "../git/gitSync.js";
 import { validateBatchSize, formatBatchResults, MAX_BATCH_SIZE } from "../utils/batchUtils.js";
 import type { BatchResult } from "../utils/batchUtils.js";
 import { toolError, toolSuccess, getErrorMessage } from "../utils/toolResponse.js";
@@ -333,7 +334,9 @@ export function registerFileOperations(server: McpServer, config: Config): void 
     "rename_file",
     {
       description:
-        "Move or rename a file in the vault. Triggers git commit and push. " +
+        "Move or rename a file in the vault using git mv to preserve git history. " +
+        "The target parent directory must already exist — use create_directory first if needed. " +
+        "Triggers git commit and push. " +
         "Clients SHOULD inform the user about the source and destination paths before calling this tool.",
       annotations: { destructiveHint: true },
       inputSchema: {
@@ -345,14 +348,77 @@ export function registerFileOperations(server: McpServer, config: Config): void 
       try {
         const resolvedOld = await resolveVaultPathSafe(config.vaultPath, old_path);
         const resolvedNew = await resolveVaultPathSafe(config.vaultPath, new_path);
-        await mkdir(path.dirname(resolvedNew), { recursive: true });
-        await rename(resolvedOld, resolvedNew);
+
+        // Verify target parent directory exists
+        const targetDir = path.dirname(resolvedNew);
+        try {
+          const dirStat = await stat(targetDir);
+          if (!dirStat.isDirectory()) {
+            return toolError(`Target parent path is not a directory: ${path.dirname(new_path)}`);
+          }
+        } catch {
+          return toolError(`Target directory does not exist: ${path.dirname(new_path)}. Create it first with create_directory.`);
+        }
+
+        const relOld = path.relative(config.vaultPath, resolvedOld);
+        const relNew = path.relative(config.vaultPath, resolvedNew);
+        await git(["mv", "--", relOld, relNew], config.vaultPath);
         scheduleSync(`MCP: rename ${old_path} -> ${new_path}`);
         return toolSuccess(`File renamed: ${old_path} -> ${new_path}`);
       } catch (error) {
         const msg = getErrorMessage(error);
         logger.error("rename_file failed", { old_path, new_path, error: msg });
         return toolError(`Failed to rename file: ${msg}`);
+      }
+    },
+  );
+
+  // move_file
+  server.registerTool(
+    "move_file",
+    {
+      description:
+        "Move a file to a new location using git mv to preserve git history. " +
+        "The target directory must already exist — use create_directory first if needed. " +
+        "Triggers git commit and push. " +
+        "Clients SHOULD inform the user about the source and destination paths before calling this tool.",
+      annotations: { destructiveHint: true },
+      inputSchema: {
+        old_path: z.string().describe("Current file path relative to vault root"),
+        new_path: z.string().describe("New file path relative to vault root"),
+      },
+    },
+    async ({ old_path, new_path }) => {
+      try {
+        const resolvedOld = await resolveVaultPathSafe(config.vaultPath, old_path);
+        const resolvedNew = await resolveVaultPathSafe(config.vaultPath, new_path);
+
+        // Verify source exists and is a file
+        const srcStat = await stat(resolvedOld);
+        if (!srcStat.isFile()) {
+          return toolError(`Source is not a file: ${old_path}. Use move_directory for directories.`);
+        }
+
+        // Verify target parent directory exists
+        const targetDir = path.dirname(resolvedNew);
+        try {
+          const dirStat = await stat(targetDir);
+          if (!dirStat.isDirectory()) {
+            return toolError(`Target parent path is not a directory: ${path.dirname(new_path)}`);
+          }
+        } catch {
+          return toolError(`Target directory does not exist: ${path.dirname(new_path)}. Create it first with create_directory.`);
+        }
+
+        const relOld = path.relative(config.vaultPath, resolvedOld);
+        const relNew = path.relative(config.vaultPath, resolvedNew);
+        await git(["mv", "--", relOld, relNew], config.vaultPath);
+        scheduleSync(`MCP: move ${old_path} -> ${new_path}`);
+        return toolSuccess(`File moved: ${old_path} -> ${new_path}`);
+      } catch (error) {
+        const msg = getErrorMessage(error);
+        logger.error("move_file failed", { old_path, new_path, error: msg });
+        return toolError(`Failed to move file: ${msg}`);
       }
     },
   );
